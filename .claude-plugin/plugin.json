@@ -1,0 +1,33 @@
+{
+  "name": "trade-pipeline",
+  "version": "1.2.2",
+  "description": "AI-powered foreign trade document pipeline: RFQ Excel -> Quotation -> PI -> CI -> PL. Single data model, UUID-anchored price write-back, config-driven multi-format support.",
+  "author": "Dangooy",
+  "license": "MIT",
+  "homepage": "https://github.com/Dangooy/trade-pipeline",
+  "skills": [
+    {
+      "name": "trade-pipeline-run",
+      "path": ".claude/skills/trade-pipeline-run/SKILL.md",
+      "description": "Execute the trade document pipeline or price write-back"
+    },
+    {
+      "name": "trade-pipeline-init",
+      "path": ".claude/skills/trade-pipeline-init/SKILL.md",
+      "description": "Interactive setup wizard for first-time configuration"
+    }
+  ],
+  "requirements": {
+    "python": ">=3.11",
+    "install": "pip install -e ."
+  },
+  "tags": [
+    "foreign-trade",
+    "document-generation",
+    "excel",
+    "pipeline",
+    "quotation",
+    "invoice",
+    "packing-list"
+  ]
+}

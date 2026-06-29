@@ -1,0 +1,91 @@
+# ═══════════════════════════════════════════════════
+# demo_config.yaml — 示例卖家 / 买家数据（首启试用用）
+#
+# 这些不是用户的真实数据，而是供首次使用者一键加载试用的示例实体。
+# GUI 在 sellers/buyers 为空时显示「加载示例数据试用」按钮，点击后
+# 经 ConfigService.merge_demo 增量合并到用户 config.yaml（不覆盖同名实体）。
+#
+# 模板 config.yaml 本身保持 sellers: {} / buyers: {} 空白，符合
+# 「面向 N 个外贸从业者、无固定默认买卖家」的产品方向。
+# ═══════════════════════════════════════════════════
+
+sellers:
+  acme_export:
+    name_cn: "示例出口贸易有限公司"
+    name_en: "ACME EXPORT TRADING CO., LTD."
+    address: "NO. 88, INDUSTRY ROAD, ECONOMIC ZONE, SHANDONG, CHINA 250000"
+    address_lines:
+      - "NO. 88, INDUSTRY ROAD, ECONOMIC ZONE,"
+      - "SHANDONG, CHINA 250000"
+    contact: "John Smith"
+    tel: "+86 123 4567 890"
+    email: "john@acme-export.example.com"
+    bank:
+      name: "BANK OF CHINA"
+      address: "SHANDONG BRANCH"
+      swift: "BKCHCNBJ000"
+      account_no: "0000000000000000"
+      account_name: "ACME EXPORT TRADING CO., LTD."
+
+  delta_mfg:
+    name_cn: "德尔塔机械制造有限公司"
+    name_en: "DELTA MANUFACTURING CO., LTD."
+    address: "Wuxi, Jiangsu, China"
+    address_lines:
+      - "Factory 1: Wuxi, Jiangsu, China"
+      - "Factory 2: Liaocheng, Shandong, China"
+    contact: "Jane Doe, General Manager"
+    tel: "+86 0510 8888 000"
+    email: "jane@delta-mfg.example.com"
+    bank: { name: "", address: "", swift: "", account_no: "", account_name: "" }
+
+buyers:
+  global_fasteners:
+    name_en: "Global Fasteners LLC"
+    name_ru: null
+    legal_names:
+      - "Global Fasteners LLC"
+      - "Global Fasteners Limited Liability Company"
+    aliases:
+      - "GF"
+      - "Global Fasteners"
+    address: "1234 Industrial Ave, Chicago, IL 60601, USA"
+    address_lines:
+      - "1234 Industrial Ave,"
+      - "Chicago, IL 60601, USA"
+    contact: "Mike Johnson"
+    email: "mike@globalfasteners.example.com"
+    inn: ""
+
+  eurofix_gmbh:
+    name_en: "EuroFix GmbH"
+    name_ru: null
+    legal_names:
+      - "EuroFix GmbH"
+    aliases:
+      - "EuroFix"
+      - "EUROFIX"
+    address: "Industriestraße 42, 40210 Düsseldorf, Germany"
+    address_lines:
+      - "Industriestraße 42,"
+      - "40210 Düsseldorf, Germany"
+    contact: "Hans Mueller"
+    email: "hans@eurofix.example.com"
+    inn: ""
+
+  metiz_trading:
+    name_en: 'OOO "Metiz Trading"'
+    name_ru: 'ООО "Метиз Трейдинг"'
+    legal_names:
+      - 'OOO "Metiz Trading"'
+      - 'ООО "Метиз Трейдинг"'
+    aliases:
+      - "Metiz Trading"
+      - "Метиз Трейдинг"
+    address: "Prospekt Mira 100, Moscow, Russia 101000"
+    address_lines:
+      - "Prospekt Mira 100,"
+      - "Moscow, Russia 101000"
+    contact: "Ivan Petrov"
+    email: "ivan@metiz-trading.example.com"
+    inn: "7700000000"

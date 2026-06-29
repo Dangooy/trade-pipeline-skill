@@ -1,0 +1,129 @@
+# ═══════════════════════════════════════════════════
+# trade_pipeline config — sanitized example
+# ═══════════════════════════════════════════════════
+
+# ── sellers / buyers ──
+# 模板留空：本工具面向 N 个外贸从业者，无固定默认买卖家。
+# 首次使用可在 GUI 点「加载示例数据试用」一键导入 examples/demo_config.yaml，
+# 或在「配置中心」Tab 手动新增自己的卖家/客户。
+sellers: {}
+
+buyers: {}
+
+format_defaults:
+  standard:
+    seller_id: acme_export
+    currency: CNY
+    price_unit: "CNY/MPCS"
+    terms_id: standard_cny
+  standard_usd:
+    seller_id: acme_export
+    currency: USD
+    price_unit: "USD/PC"
+    terms_id: standard_usd
+  washers_mar:
+    seller_id: delta_mfg
+    currency: USD
+    price_unit: "USD/TON"
+    terms_id: washers_usd
+    exchange_rate: 7.2
+
+terms_templates:
+  standard_cny:
+    payment: "30% T/T deposit in advance; 70% T/T balance before shipment."
+    delivery: "FOB Qingdao / Shanghai, Incoterms 2020. Price quoted in CNY."
+    lead_time: "45–60 days after receipt of deposit and confirmed purchase order."
+    validity: "10 days from the quotation date."
+    packing: "Standard export packaging: 25 kg cartons, plastic inner bags, Euro pallets, stretch film, with marking. GW 25 kg / NW 24.8 kg per carton."
+    quality: "Q195 / Q235 carbon steel. Good quality grade. 100% inspection before shipment."
+  standard_usd:
+    payment: "30% T/T deposit in advance; 70% T/T balance before shipment."
+    delivery: "FOB Qingdao / Shanghai, Incoterms 2020. Price quoted in USD."
+    lead_time: "45–60 days after receipt of deposit and confirmed purchase order."
+    validity: "10 days from the quotation date."
+    packing: "Standard export packaging: 25 kg cartons, plastic inner bags, Euro pallets, stretch film, with marking. GW 25 kg / NW 24.8 kg per carton."
+    quality: "Good quality grade. 100% inspection before shipment."
+  washers_usd:
+    payment: "30% T/T deposit in advance; 70% T/T balance before shipment."
+    delivery: "FOB Qingdao / Shanghai, Incoterms 2020."
+    lead_time: "45-60 days after receipt of deposit and confirmed purchase order."
+    validity: "10 days from the quotation date."
+    packing: "Bulk packing: 25 kg cartons, plastic inner bags, Euro pallets, stretch film, with labels."
+    quality: "Good quality grade. 100% inspection before shipment."
+    exchange_rate: "CNY / USD exchange rate: 7.2 : 1"
+
+defaults:
+  port_of_loading: "QINGDAO,CHINA"
+  port_of_destination: null
+  pi_number_pattern: "PI-{order_no}"
+  ci_number_pattern: "CI-{order_no}"
+  quote_no_pattern: "QT-{order_no}"
+  date_format: "%d %B %Y"
+
+packing:
+  carton_weight_kg: 25
+  pallet_self_weight_kg: 28
+  cartons_per_pallet: 36
+
+# ── 托盘预设（v1.1.0） ──
+# 单位：毫米。Gateway 让用户选预设或自定义。
+pallet_presets:
+  euro:
+    label: "欧标 1200×800"
+    length_mm: 1200
+    width_mm: 800
+    self_weight_kg: 28
+  us:
+    label: "美标 1219×1016"
+    length_mm: 1219
+    width_mm: 1016
+    self_weight_kg: 35
+  asia:
+    label: "亚标 1100×1100"
+    length_mm: 1100
+    width_mm: 1100
+    self_weight_kg: 25
+  # 自定义路径：用户在 Gateway 里直接填 length_mm + width_mm，跳过 preset
+
+# ── 产品库（v1.1.0） ──
+# Key 是 canonical description（小写、去多余空格）。
+# Gateway 命中则跳过询问，未命中则用户填完写回这里。
+# 示例条目（脱敏）：
+product_catalog: {}
+  # 真实条目格式：
+  # "hex head bolt din 933 m8x25 zp":
+  #   kg_per_1000pcs: 5.8
+  #   weight_kg_per_piece: 0.0058
+  #   pcs_per_carton: 1000
+  #   default_carton_weight_kg: 5.8
+
+pl_profiles:
+  default:
+    pl_config: "standard"
+    packing_profile: "standard_25kg"
+  metiz_trading:
+    default:
+      pl_config: "standard"
+      packing_profile: "standard_25kg"
+    bulk:
+      pl_config: "standard-bulk"
+      packing_profile: "bulk_pallet"
+  eurofix_gmbh:
+    default:
+      pl_config: "eurofix"
+      packing_profile: "standard_25kg"
+
+cache:
+  dir: ".cache/understanding"
+  prompt_version: "v1.0"
+  schema_version: "v1.0"
+  enabled: true
+
+ocr_review:
+  force_review_fields:
+    - "description"
+    - "standard"
+    - "quantity"
+    - "unit"
+    - "weight_kg"
+  confidence_threshold: 0.90

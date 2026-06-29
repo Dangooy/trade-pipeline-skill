@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "trade-pipeline-skill"
+version = "1.2.2"
+description = "AI-powered foreign trade document pipeline (Skill edition): RFQ → Quotation → PI → CI → PL"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.11"
+dependencies = [
+    "openpyxl>=3.1.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+llm = ["anthropic>=0.40.0"]
+test = ["pytest>=7.0", "pytest-cov>=4.0", "ruff>=0.4.0"]
+dev = [
+    "anthropic>=0.40.0",
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "ruff>=0.4.0",
+]
+
+[project.scripts]
+trade-pipeline = "trade_pipeline.pipeline.main:main"
+
+[tool.setuptools.packages.find]
+include = ["trade_pipeline*"]
+
+[tool.setuptools.package-data]
+trade_pipeline = ["config/*.yaml"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
