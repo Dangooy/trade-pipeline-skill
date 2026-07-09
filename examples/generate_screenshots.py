@@ -1,13 +1,17 @@
 """Generate sample output files for screenshots."""
 import sys
-sys.path.insert(0, str(__import__('pathlib').Path(__file__).resolve().parent.parent))
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
+import yaml
 
 from trade_pipeline.models.order_model import OrderModel, OrderRefs, OrderInfo, OrderItem, DerivedData, OrderMeta
+from trade_pipeline.understanding.assembler import resolve_entities
 from trade_pipeline.writers.quote_writer import write_quotation_with_uuid
 from trade_pipeline.writers.pi_writer import PIWriter
 from trade_pipeline.writers.ci_writer import CIWriter
-import yaml
-from pathlib import Path
+from trade_pipeline.writers.pl_writer_lite import PLWriterLite
 
 config_path = Path(__file__).resolve().parent.parent / "trade_pipeline" / "config" / "config.yaml"
 with open(config_path, "r", encoding="utf-8") as f:
@@ -50,7 +54,6 @@ model = OrderModel(
     meta=OrderMeta(source_files=["sample_inquiry.xlsx"], created_at="2026-05-19", parser_model="rules"),
 )
 
-from trade_pipeline.understanding.assembler import resolve_entities
 model = resolve_entities(model, config)
 
 out_dir = Path(__file__).resolve().parent / "sample_output"
@@ -74,7 +77,6 @@ ci_writer = CIWriter(model, config)
 ci_info = ci_writer.write(str(out_dir / "2601_ci.xlsx"))
 print(f"CI: {ci_info['items']} items, {ci_info['ci_number']}")
 
-from trade_pipeline.writers.pl_writer_lite import PLWriterLite
 pl_writer = PLWriterLite(model, config)
 pl_info = pl_writer.write(str(out_dir / "2601_pl.xlsx"))
 print(f"PL: {pl_info['items']} items, {pl_info['total_pallets']} pallets")
