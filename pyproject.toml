@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "trade-pipeline-skill"
-version = "1.3.0"
+version = "1.4.0"
 description = "AI-powered foreign trade document pipeline (Skill edition): RFQ → Quotation → PI → CI → PL"
 readme = "README.md"
 license = {text = "MIT"}

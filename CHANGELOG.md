@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-07-10
+
+Second adversarial-audit remediation (frozen-criteria benchmark round). An external audit with reproducible evidence confirmed a systematic CI/PL gross-weight mismatch, illegal amount-in-words output at boundaries, and several injection/robustness gaps. All confirmed findings (T1-T8) are fixed in this release.
+
+### Fixed
+- **CI/PL gross weight systematically inconsistent (T1)** (`pipeline/main.py`, `writers/ci_writer.py`): CI was generated before PL, so `model.derived.total_gross_weight` was always `None` at CI time and CI unconditionally fell back to the `nw*1.036` estimate, while PL printed the real pallet-based weight (net + pallets × pallet self-weight) — every order shipped with two different G.W. figures (e.g. 590.52 vs 598.0), diverging further on large orders. Generation order is now PI → PL → CI in both `_write_trade_docs` and `run_price_update`: PL writes back the real gross weight first, CI reads it (the estimate remains only as a fallback when PL fails). Verified: same order now prints identical G.W. on both documents.
+- **`amount_to_words` illegal output at boundaries (T2)** (`writers/ci_writer.py`): cents were computed via float arithmetic and could round to 100 without carrying (`0.995` → "…AND ONE HUNDRED CENTS ONLY"), negative amounts lost their cents (`-5.5` → "MINUS FIVE ONLY"), and scale words stopped at MILLION (`1e9` → "ONE THOUSAND MILLION"). Now integer-cent arithmetic (`divmod(round(|amount|*100), 100)`) with a unified MINUS prefix, plus BILLION/TRILLION scales. CI is a legal document; this closes all known illegal-words paths.
+- **SPRING LOCK WASHER misgrouped as FLAT WASHER (T7)** (`understanding/canonicalizer.py`): the generic `"WASHER"` branch preceded the specific `"SPRING LOCK WASHER"` branch in the if/elif chain, making the latter unreachable. Specific branch moved first.
+
+### Added
+- **Cross-document validation** (`validation/cross_doc.py`, new): after CI and PL are both generated, `check_ci_pl_gross_weight` compares their gross weights (0.01 kg tolerance) and emits a visible warning on mismatch — a regression guard for T1.
+- **Formula-injection sanitization (T3)** (`writers/base_writer.py`, `writers/quote_writer.py`): `sc()`/`mc()` now prefix `'` to string values starting with `= + - @` so inquiry-derived text can never be written as a live Excel formula (`=cmd|…`, `=HYPERLINK(…)`); intentional formulas (amount columns, `=SUM` totals) are explicitly whitelisted via `formula=True`. `quote_writer`'s direct cell writes are routed through the same sanitizer.
+- **LLM prompt isolation (T4)** (`understanding/llm_parser.py`): raw document text is wrapped in `<untrusted_document_content>` tags and the system prompt now instructs the model to treat it as untrusted data and ignore any instructions inside it.
+- **`--use-llm` privacy disclosure (T5)** (README.md, CLAUDE.md, README_DEV.md): documents that `--use-llm` sends raw inquiry content (customer names, products, quantities) to the Anthropic API, is opt-in and off by default, and should be avoided for sensitive documents. (Flagged in `docs/adversarial-review-2607.md` since v1.3.0 but never documented.)
+- **Input limits (T6)** (`extractors/excel_extractor.py`): 20 MB file-size and 5000-row caps with a clear `FileTooLargeError`; unbounded workbooks can no longer exhaust memory.
+- 22 new tests (227 → 249 total): amount-in-words boundary/negative/large-number cases (previously zero coverage), sanitizer allow/deny cases, extractor limits (`tests/test_extractor.py`, new), cross-doc gross-weight rule, canonicalizer grouping regression.
+
+### Changed
+- **Dependency upper bounds (T8)** (pyproject.toml, requirements.txt): `openpyxl<4`, `pyyaml<7`, `anthropic<2`, `pytest<9`, `pytest-cov<7`, `ruff<1` — a major-version release of any dependency can no longer break a fresh install silently.
+
+[1.4.0]: https://github.com/Dangooy/trade-pipeline-skill/releases/tag/v1.4.0
+
 ## [1.3.0] - 2026-07-09
 
 Adversarial-review remediation. Two independent AI reviews (Claude Sonnet 5 self-review + Claude Fable 5 cross-check, both recorded under `docs/adversarial-review-2607*.md`) found buyer-matching false positives, a silent LLM-degradation path, and a silent price-column fallback — all capable of producing a structurally valid but factually wrong PI/CI without any error surfacing. This release closes those gaps.
