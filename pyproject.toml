@@ -36,3 +36,16 @@ trade_pipeline = ["config/*.yaml"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+
+[tool.ruff.lint]
+# Pin the rule set explicitly. Ruff's *default* selection widens between
+# releases, and CI installs ruff unpinned (`ruff>=0.4.0,<1`) — so relying on
+# the default means a new ruff release can turn a green build red without a
+# single line of our code changing. That is exactly what happened on
+# 2026-07-26: ruff 0.16.0 expanded the defaults and surfaced 70 findings in
+# code that had passed CI on 2026-07-10.
+#
+# E4/E7/E9 + F reproduces the rule set this project has always been linted
+# against. Widening it is a deliberate, separate change — add rules here and
+# fix the fallout in the same commit.
+select = ["E4", "E7", "E9", "F"]
