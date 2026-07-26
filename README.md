@@ -166,7 +166,7 @@ Trade Pipeline **不是 ERP 替代品**。ERP 管库存、财务、应收应付�
 | **Python 3.12 或更高** | 运行这个工具 | [python.org/downloads](https://www.python.org/downloads/) |
 | **Git** | 下载代码 | [git-scm.com/downloads](https://git-scm.com/downloads/) |
 
-> 不确定有没有？打开命令行（Windows 按 Win+R 输入 `cmd`，Mac 打开"终端"），输入 `python --version` 和 `git --version`，能显示版本号就说明有了。
+> 不确定有没有？打开命令行（Windows 按 Win+R 输入 `cmd`，Mac 打开"终端"），输入 `git --version`，再输入 `python --version`（**Mac / Linux 上要输 `python3 --version`**，这两个系统没有不带 3 的 `python` 命令）。能显示版本号就说明有了。
 
 ## 安装
 
@@ -180,8 +180,21 @@ Trade Pipeline **不是 ERP 替代品**。ERP 管库存、财务、应收应付�
 ```bash
 git clone https://github.com/Dangooy/trade-pipeline-skill.git
 cd trade-pipeline-skill
+
+# 建一个虚拟环境（这一步不能省，原因见下）
+python3 -m venv .venv && source .venv/bin/activate    # Mac / Linux
+# Windows PowerShell 用这行： py -m venv .venv; .\.venv\Scripts\Activate.ps1
+
 pip install -e .
 ```
+
+> **为什么要建虚拟环境**：现在的 Mac（Homebrew）和多数 Linux 发行版会保护系统自带的
+> Python，直接 `pip install` 会被拒绝并报 `externally-managed-environment`。虚拟环境
+> 是官方推荐做法，装的东西只留在项目目录里，不会弄乱系统。
+>
+> 激活之后命令行开头会出现 `(.venv)`，此时 `python` 和 `pip` 都指向这个环境——
+> **不用再纠结 `python` 还是 `python3`**。关掉终端后重新进入项目时，需要再执行一次
+> 上面那行 `source .venv/bin/activate`（Windows 是 `.\.venv\Scripts\Activate.ps1`）。
 
 **第 2 步：在 Claude Code 里加载插件**
 
@@ -217,6 +230,7 @@ pip install -e .
 # 1. 下载项目并安装引擎
 git clone https://github.com/Dangooy/trade-pipeline-skill.git
 cd trade-pipeline-skill
+py -m venv .venv; .\.venv\Scripts\Activate.ps1
 pip install -e .
 
 # 2. 把两个技能拷进 WorkBuddy 技能目录
@@ -231,6 +245,7 @@ Copy-Item -Recurse -Force ".\.claude\skills\trade-pipeline-run"  "$env:USERPROFI
 # 1. 下载项目并安装引擎
 git clone https://github.com/Dangooy/trade-pipeline-skill.git
 cd trade-pipeline-skill
+python3 -m venv .venv && source .venv/bin/activate
 pip install -e .
 
 # 2. 把两个技能拷进 WorkBuddy 技能目录

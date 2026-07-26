@@ -123,10 +123,17 @@ python -m trade_pipeline init
 推荐使用 Python 3.12；仓库包含 `.python-version`，pyenv / uv 用户会自动识别。
 
 ```bash
-py -3.12 -m pip install -e ".[test]"
-py -3.12 -m pytest tests -q
-py -3.12 -m ruff check trade_pipeline tests
+# 建虚拟环境（Homebrew / Debian 的系统 Python 受 PEP 668 保护，直接 pip install 会被拒绝）
+python3.12 -m venv .venv && source .venv/bin/activate
+# Windows: py -3.12 -m venv .venv; .\.venv\Scripts\Activate.ps1
+
+pip install -e ".[test]"
+pytest tests -q
+ruff check trade_pipeline tests
 ```
+
+> 激活 venv 后 `python` / `pip` 即指向该环境，无需再区分 `python` 与 `python3`，
+> 也不必加 `py -3.12` 前缀（该命令只在 Windows 上存在）。
 
 ## 设计文档
 

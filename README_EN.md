@@ -166,7 +166,7 @@ You'll need two things installed on your computer (skip anything you already hav
 | **Python 3.12 or later** | Runs this tool | [python.org/downloads](https://www.python.org/downloads/) |
 | **Git** | Downloads the code | [git-scm.com/downloads](https://git-scm.com/downloads/) |
 
-> Not sure if you have them? Open a command line (Windows: press Win+R and type `cmd`; Mac: open "Terminal"), then type `python --version` and `git --version`. If a version number shows up, you're good.
+> Not sure if you have them? Open a command line (Windows: press Win+R and type `cmd`; Mac: open "Terminal"), then type `git --version`, followed by `python --version` (**on Mac / Linux use `python3 --version`** — those systems have no bare `python` command). If a version number shows up, you're good.
 
 ## Installation
 
@@ -180,8 +180,22 @@ If you haven't used [Claude Code](https://claude.ai/code) before: it's Anthropic
 ```bash
 git clone https://github.com/Dangooy/trade-pipeline-skill.git
 cd trade-pipeline-skill
+
+# Create a virtual environment — don't skip this, see the note below
+python3 -m venv .venv && source .venv/bin/activate    # Mac / Linux
+# Windows PowerShell: py -m venv .venv; .\.venv\Scripts\Activate.ps1
+
 pip install -e .
 ```
+
+> **Why the virtual environment**: modern macOS (Homebrew) and most Linux distros protect
+> their system Python — a bare `pip install` is refused with `externally-managed-environment`.
+> A venv is the officially recommended approach: everything stays inside the project folder
+> and nothing pollutes your system.
+>
+> Once activated your prompt shows `(.venv)`, and both `python` and `pip` resolve to that
+> environment — **no more `python` vs `python3` guessing**. After closing the terminal, re-run
+> `source .venv/bin/activate` (Windows: `.\.venv\Scripts\Activate.ps1`) when you come back.
 
 **Step 2: Load the plugin in Claude Code**
 
@@ -217,6 +231,7 @@ If you're in China and using [WorkBuddy](https://codebuddy.cn/work) (Tencent's d
 # 1. Download the project and install the engine
 git clone https://github.com/Dangooy/trade-pipeline-skill.git
 cd trade-pipeline-skill
+py -m venv .venv; .\.venv\Scripts\Activate.ps1
 pip install -e .
 
 # 2. Copy both skills into the WorkBuddy skills directory
@@ -231,6 +246,7 @@ Copy-Item -Recurse -Force ".\.claude\skills\trade-pipeline-run"  "$env:USERPROFI
 # 1. Download the project and install the engine
 git clone https://github.com/Dangooy/trade-pipeline-skill.git
 cd trade-pipeline-skill
+python3 -m venv .venv && source .venv/bin/activate
 pip install -e .
 
 # 2. Copy both skills into the WorkBuddy skills directory

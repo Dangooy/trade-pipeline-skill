@@ -24,10 +24,19 @@ Before running, verify in order:
 
 1. **Current directory**: must contain `trade_pipeline/` directory. If not, `cd` to the repo root.
 
-2. **Installation check**: run `trade-pipeline --help`. If command not found, try `python -m trade_pipeline --help`. If both fail, prompt:
+2. **Installation check**: run `trade-pipeline --help`. If that command is not found, try `python -m trade_pipeline --help`, then `python3 -m trade_pipeline --help` (Mac / Linux have no bare `python`). If all fail, prompt:
    ```
-   管线未安装。请先在项目根目录（包含 pyproject.toml 的目录）运行：
-   python -m pip install -e .
+   管线未安装。请在项目根目录（含 pyproject.toml）先建虚拟环境再安装：
+
+     Mac / Linux:
+       python3 -m venv .venv && source .venv/bin/activate
+     Windows PowerShell:
+       py -m venv .venv; .\.venv\Scripts\Activate.ps1
+
+     pip install -e .
+
+   （不能跳过虚拟环境：Homebrew 和多数 Linux 发行版的系统 Python 受 PEP 668 保护，
+   直接 pip install 会报 externally-managed-environment。）
    ```
 
 3. **Config check**: Read `trade_pipeline/config/config.yaml`.

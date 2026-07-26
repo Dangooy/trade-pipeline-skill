@@ -165,7 +165,7 @@ Trade Pipeline **не заменяет ERP**. ERP управляет склад�
 | **Python 3.12 или новее** | Для запуска этого инструмента | [python.org/downloads](https://www.python.org/downloads/) |
 | **Git** | Для загрузки кода | [git-scm.com/downloads](https://git-scm.com/downloads/) |
 
-> Не уверены, установлено ли это? Откройте командную строку (в Windows нажмите Win+R и введите `cmd`, на Mac откройте «Терминал») и введите `python --version` и `git --version` — если появляются номера версий, значит всё установлено.
+> Не уверены, установлено ли это? Откройте командную строку (в Windows нажмите Win+R и введите `cmd`, на Mac откройте «Терминал»), введите `git --version`, затем `python --version` (**на Mac и Linux нужно вводить `python3 --version`** — в этих системах нет команды `python` без тройки). Если появляются номера версий, значит всё установлено.
 
 ## Установка
 
@@ -179,8 +179,23 @@ Trade Pipeline **не заменяет ERP**. ERP управляет склад�
 ```bash
 git clone https://github.com/Dangooy/trade-pipeline-skill.git
 cd trade-pipeline-skill
+
+# Создайте виртуальное окружение — этот шаг пропускать нельзя, пояснение ниже
+python3 -m venv .venv && source .venv/bin/activate    # Mac / Linux
+# Windows PowerShell: py -m venv .venv; .\.venv\Scripts\Activate.ps1
+
 pip install -e .
 ```
+
+> **Зачем нужно виртуальное окружение**: современные macOS (Homebrew) и большинство
+> дистрибутивов Linux защищают системный Python — обычный `pip install` будет отклонён
+> с ошибкой `externally-managed-environment`. Виртуальное окружение — официально
+> рекомендуемый способ: всё остаётся внутри папки проекта и не засоряет систему.
+>
+> После активации в начале строки появится `(.venv)`, и команды `python` и `pip` будут
+> указывать на это окружение — **больше не нужно гадать между `python` и `python3`**.
+> После закрытия терминала при следующем входе в проект снова выполните
+> `source .venv/bin/activate` (в Windows: `.\.venv\Scripts\Activate.ps1`).
 
 **Шаг 2: загрузить плагин в Claude Code**
 
@@ -216,6 +231,7 @@ pip install -e .
 # 1. Скачать проект и установить движок
 git clone https://github.com/Dangooy/trade-pipeline-skill.git
 cd trade-pipeline-skill
+py -m venv .venv; .\.venv\Scripts\Activate.ps1
 pip install -e .
 
 # 2. Скопировать оба навыка в папку навыков WorkBuddy
@@ -230,6 +246,7 @@ Copy-Item -Recurse -Force ".\.claude\skills\trade-pipeline-run"  "$env:USERPROFI
 # 1. Скачать проект и установить движок
 git clone https://github.com/Dangooy/trade-pipeline-skill.git
 cd trade-pipeline-skill
+python3 -m venv .venv && source .venv/bin/activate
 pip install -e .
 
 # 2. Скопировать оба навыка в папку навыков WorkBuddy
