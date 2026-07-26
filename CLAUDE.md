@@ -3,8 +3,8 @@
 ## Quick Start
 
 ```bash
-pip install -e .
-python -m trade_pipeline --input examples/sample_inquiry.xlsx --order TEST01 --buyer global_fasteners
+pip3 install -e .
+python3 -m trade_pipeline --input examples/sample_inquiry.xlsx --order TEST01 --buyer global_fasteners
 ```
 
 Output goes to `output/TEST01/`. Steps 1–7 generate: rfq.json, model.json, quotation.xlsx, pi.xlsx, ci.xlsx. Step 8 (PL) is optional and requires the separate `pl-gen` package.
@@ -52,14 +52,14 @@ confidential documents.
 
 ```bash
 # Generate sample output (steps 1-7)
-python -m trade_pipeline --input examples/sample_inquiry.xlsx --order DEMO01 --buyer global_fasteners
+python3 -m trade_pipeline --input examples/sample_inquiry.xlsx --order DEMO01 --buyer global_fasteners
 
 # Verify output
 ls output/DEMO01/
 # Expected: DEMO01_rfq.json, DEMO01_model.json, DEMO01_quotation.xlsx, DEMO01_pi.xlsx, DEMO01_ci.xlsx
 
 # Price write-back (after filling prices in quotation)
-python -m trade_pipeline --price-update output/DEMO01/DEMO01_quotation.xlsx --model output/DEMO01/DEMO01_model.json
+python3 -m trade_pipeline --price-update output/DEMO01/DEMO01_quotation.xlsx --model output/DEMO01/DEMO01_model.json
 ```
 
 ## PL Dual Mode
