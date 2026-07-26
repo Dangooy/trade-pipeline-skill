@@ -3,9 +3,20 @@
 ## Quick Start
 
 ```bash
-pip3 install -e .
-python3 -m trade_pipeline --input examples/sample_inquiry.xlsx --order TEST01 --buyer global_fasteners
+# Create and activate a virtual environment first.
+# macOS / Linux:
+python3 -m venv .venv && source .venv/bin/activate
+# Windows (PowerShell):
+#   py -m venv .venv; .\.venv\Scripts\Activate.ps1
+
+pip install -e .
+python -m trade_pipeline --input examples/sample_inquiry.xlsx --order TEST01 --buyer global_fasteners
 ```
+
+**Always work inside the venv.** Once activated, `python` and `pip` resolve to the venv's
+interpreter on every platform — no `python` vs `python3` branching needed. Installing into the
+system interpreter is not an option on many setups: Homebrew and Debian mark theirs
+externally-managed (PEP 668) and will refuse `pip install` outright.
 
 Output goes to `output/TEST01/`. Steps 1–7 generate: rfq.json, model.json, quotation.xlsx, pi.xlsx, ci.xlsx. Step 8 (PL) is optional and requires the separate `pl-gen` package.
 
@@ -52,14 +63,14 @@ confidential documents.
 
 ```bash
 # Generate sample output (steps 1-7)
-python3 -m trade_pipeline --input examples/sample_inquiry.xlsx --order DEMO01 --buyer global_fasteners
+python -m trade_pipeline --input examples/sample_inquiry.xlsx --order DEMO01 --buyer global_fasteners
 
 # Verify output
 ls output/DEMO01/
 # Expected: DEMO01_rfq.json, DEMO01_model.json, DEMO01_quotation.xlsx, DEMO01_pi.xlsx, DEMO01_ci.xlsx
 
 # Price write-back (after filling prices in quotation)
-python3 -m trade_pipeline --price-update output/DEMO01/DEMO01_quotation.xlsx --model output/DEMO01/DEMO01_model.json
+python -m trade_pipeline --price-update output/DEMO01/DEMO01_quotation.xlsx --model output/DEMO01/DEMO01_model.json
 ```
 
 ## PL Dual Mode
