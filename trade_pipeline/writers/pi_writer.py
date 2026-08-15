@@ -14,7 +14,8 @@ from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.page import PageMargins
 
 from .base_writer import BaseWriter, sc as _sc, mc as _mc, brd as _brd, rh as _rh
-from ..models.amounts import amount_formula
+from ..models.amounts import amount_formula, PricingMode
+from ..models.order_model import effective_weight_kg
 
 CALIBRI = "Calibri"
 
@@ -143,18 +144,22 @@ class PIWriter(BaseWriter):
 
         # ── 列头区 ──────────────────────────────────────────
 
-        # 判断是吨还是件
+        # 判断是吨还是件。price_unit/currency 与 quote_writer 一致地兜底:
+        # assembler 的 .get() 默认值不覆盖显式 null(LLM 返回 null 可达),
+        # 此前 PI 无兜底会 AttributeError 崩溃(quote 有 or 兜底,两单不一致)。
+        pu = model.order.price_unit or "CNY/MPCS"
+        currency = model.order.currency or "CNY"
         is_weight_format = model.order.format == "washers_mar"
-        is_per_ton = "TON" in model.order.price_unit.upper()
+        is_per_ton = PricingMode.from_price_unit(pu) is PricingMode.PER_TON
 
         if is_weight_format or is_per_ton:
             qty_label = "Qty (tons)"
-            price_label = f"Unit Price\n({model.order.price_unit})"
+            price_label = f"Unit Price\n({pu})"
             price_fmt = "#,##0.00"
             qty_fmt = "#,##0.00"
         else:
             qty_label = "Qty (pcs)"
-            price_label = f"Unit Price\n({model.order.price_unit})"
+            price_label = f"Unit Price\n({pu})"
             price_fmt = "#,##0.00"
             qty_fmt = "#,##0"
 
@@ -172,7 +177,7 @@ class PIWriter(BaseWriter):
         ws.cell(R, 13).fill = hdr_fill
         _sc(ws, R, 14, value=price_label, font=hdr_font, align=_aln("center", wrap=True))
         ws.cell(R, 14).fill = hdr_fill
-        _sc(ws, R, 15, value=f"Total Amount\n({model.order.currency})",
+        _sc(ws, R, 15, value=f"Total Amount\n({currency})",
             font=hdr_font, align=_aln("center", wrap=True))
         ws.cell(R, 15).fill = hdr_fill
         _rh(ws, R, 28)
@@ -184,7 +189,7 @@ class PIWriter(BaseWriter):
         _sc(ws, R, 12, border=_brd(left="thin"))
         _sc(ws, R, 13, border=_brd(left="thin"))
         _sc(ws, R, 14, border=_brd(left="thin", right="thin"))
-        _sc(ws, R, 15, value=f"{model.order.currency}",
+        _sc(ws, R, 15, value=f"{currency}",
             font=_fnt(CALIBRI, 10), align=_aln("center"))
         R += 1
 
@@ -217,10 +222,10 @@ class PIWriter(BaseWriter):
                 border=_brd(left="thin", right="thin"),
                 num_fmt=qty_fmt)
 
-            # Weight 列
-            weight = item.weight_kg or (
-                item.kg_mpcs if item.kg_mpcs else None
-            )
+            # Weight 列。统一派生口径(见 order_model.effective_weight_kg):
+            # 此前 weight_kg 缺失时把 kg_mpcs(每千件重)原值写入本列,
+            # 吨计价金额公式 =M/1000*N 随之按错误单位计算。
+            weight = effective_weight_kg(item)
             _sc(ws, R, 13, value=weight,
                 font=_fnt(CALIBRI, 11), align=_aln("right"),
                 border=_brd(left="thin", right="thin"),
@@ -236,7 +241,7 @@ class PIWriter(BaseWriter):
             # 列：L=quantity, M=weight, N=unit_price
             col_M = get_column_letter(13)
             formula = amount_formula(
-                model.order.price_unit,
+                pu,
                 qty_cell=f"{col_L}{R}",
                 weight_cell=f"{col_M}{R}",
                 price_cell=f"{col_N}{R}",
@@ -262,7 +267,7 @@ class PIWriter(BaseWriter):
         _sc(ws, R, 13, value=f"=SUM(M{DATA_START}:M{DATA_END})", formula=True,
             font=_fnt(CALIBRI, 10, bold=True), align=_aln("right"),
             border=tblr, num_fmt="#,##0.00")
-        _sc(ws, R, 14, value=model.order.currency,
+        _sc(ws, R, 14, value=currency,
             font=_fnt(CALIBRI, 10, bold=True), align=_aln("right"),
             border=tblr)
         _sc(ws, R, 15, value=f"=SUM(O{DATA_START}:O{DATA_END})", formula=True,

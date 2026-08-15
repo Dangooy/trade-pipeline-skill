@@ -19,7 +19,8 @@ def canonicalize(rfq: dict) -> dict:
     就地修改 items 列表中的每个 item。
     返回修改后的 rfq。
     """
-    for item in rfq.get("items", []):
+    # `or []`：items 键存在但值为 null 时，.get 的默认值不生效（None 不可迭代）
+    for item in rfq.get("items") or []:
         _normalize_standard(item)
         _normalize_description(item)
         _normalize_unit(item, rfq.get("format", "standard"))

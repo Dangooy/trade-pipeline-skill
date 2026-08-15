@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] - 2026-08-15
+
+Third external-audit remediation (findings A1-A7, recorded in `docs/adversarial-review-2608-external.md`; does not overlap with the 2607 T-series). Core theme: field-caliber consistency and output validation in the money/weight paths — where a wrong number on a real document is a direct financial or customs risk.
+
+### Fixed
+- **PI weight column unit confusion under ton pricing (A1)** (`models/order_model.py`, `writers/pi_writer.py`, `writers/ci_writer.py`, `writers/pl_writer_lite.py`): when `weight_kg` was missing, PI wrote the raw `kg_mpcs` (kg per 1000 pcs) into the "Weight (kgs)" column, and the ton-pricing amount formula `=M/1000*N` then computed money from a per-mille unit; CI's `compute_amount` used `weight_kg` (0.0), so PI and CI diverged despite the shared `amounts.py` source. New `effective_weight_kg()` (`weight_kg → per-piece×qty → kg_mpcs×qty/1000 → None`, 0.0 preserved as valid) is now the single derivation used by PI, CI, and PL lite.
+- **CI/PL net-weight caliber split (A2)** (`writers/ci_writer.py`): CI summed only `weight_kg` while PL derived from three sources — kg_mpcs-only items printed real net weight on PL and `N.W.: 0.00KGS` on CI. Both now use `effective_weight_kg()`.
+- **LLM response schema validation (A3)** (`understanding/llm_parser.py`, `understanding/canonicalizer.py`, `understanding/assembler.py`): parsed LLM output was only `isinstance(dict)`-checked before caching — `items: null` crashed canonicalizer (`.get` default not applied to explicit null), string-number quantities crashed assembler's `sum()`, and the bad result was cached. New `_validate_rfq_schema()` (structure checks, numeric-string coercion incl. thousands separators, negative-quantity rejection) routes failures into the existing degraded path (explicitly tagged, never cached); `or []` null-guards added downstream.
+- **Untrusted-tag closure escape (A4)** (`understanding/llm_parser.py`): inquiry content could contain the literal `</untrusted_document_content>` and break out of the T4 prompt-isolation tag. `_strip_untrusted_tags()` now removes tag literals from content before wrapping.
+- **Null `price_unit`/`currency` crash and "None" rendering (A5)** (`understanding/assembler.py`, `writers/pi_writer.py`, `writers/ci_writer.py`): `.get()` defaults don't apply to explicit nulls (reachable via LLM output), so PI's `.upper()` crashed with `AttributeError` while CI rendered `None/ FOB PRICE` and `SAY: NONE …`. Root cause fixed in assembler (`or` fallback); writer-level defaults added as second line of defense, consistent with quote_writer.
+- **PL empty-order / divide-by-zero guards (A7)** (`writers/pl_writer_lite.py`): empty items silently produced a "1 pallet, gross = pallet self-weight" empty-cargo PL; `cartons_per_pallet=0` crashed with ZeroDivisionError. Both now raise ValueError.
+
+### Changed
+- **Quotation Amount column is now a live formula (A6)** (`writers/quote_writer.py`): in non-weight mode the header said "Amount (currency)" but the column wrote `weight_kg` — never computed, always empty (or showing kilograms when weight data existed). Now reuses `amounts.amount_formula()` (`=E×F` / `=E/1000×F`), so amounts appear as soon as sales fills the price column; ton pricing without weight data honestly stays blank.
+- 27 new tests (249 → 276 total, `tests/test_audit_fixes_2608.py`): effective-weight priority/zero-valid/derivation cases, PI ton-pricing column values, null price_unit/currency survival, CI↔PL net-weight parity, schema validation accept/reject matrix, tag-stripping, quotation formula modes, PL guards.
+
 ## [1.4.0] - 2026-07-10
 
 Second adversarial-audit remediation (frozen-criteria benchmark round). An external audit with reproducible evidence confirmed a systematic CI/PL gross-weight mismatch, illegal amount-in-words output at boundaries, and several injection/robustness gaps. All confirmed findings (T1-T8) are fixed in this release.

@@ -15,6 +15,7 @@ from openpyxl.utils import get_column_letter
 
 from .base_writer import BaseWriter, sc as _sc, mc as _mc, brd as _brd
 from ..models.amounts import amount_formula, compute_amount
+from ..models.order_model import effective_weight_kg
 
 CALIBRI = "Calibri"
 
@@ -97,8 +98,10 @@ class CIWriter(BaseWriter):
     def write(self, output_path: str, **kwargs) -> dict:
         model = self.model
         items = model.items
-        currency = model.order.currency
-        price_unit = model.order.price_unit
+        # 与 quote/PI 一致地兜底:currency 缺失时此前会渲染 "None/ FOB PRICE"
+        # 和 "SAY: None ... ONLY."(assembler 的 .get 默认值不覆盖显式 null)
+        currency = model.order.currency or "CNY"
+        price_unit = model.order.price_unit or "CNY/MPCS"
 
         wb = Workbook()
         ws = wb.active
@@ -342,7 +345,10 @@ class CIWriter(BaseWriter):
         R += 1
 
         # ── 净重/毛重 ──
-        nw = sum(i.weight_kg or 0 for i in items)
+        # 统一派生口径(见 order_model.effective_weight_kg):此前只认 weight_kg,
+        # 与 PL lite 的三来源派生分裂——只有 kg_mpcs 的商品 PL 显示真实净重、
+        # CI 打 N.W.:0.00KGS,清关单证对不上。
+        nw = sum(effective_weight_kg(i) or 0 for i in items)
         gw = model.derived.total_gross_weight or round(nw * 1.036, 2)
         _sc(ws, R, 1, value=f"N.W.:{nw:,.2f}KGS  G.W.:{gw:,.2f}KGS", font=_fnt(12))
         R += 1

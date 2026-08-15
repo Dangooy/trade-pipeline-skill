@@ -51,23 +51,23 @@ def _compute_packing(
     pallet_self_weight_kg: float = DEFAULT_PALLET_SELF_WEIGHT_KG,
     measurement_per_pallet_m3: float = DEFAULT_MEASUREMENT_PER_PALLET_M3,
 ) -> tuple[list[PackingLine], dict]:
+    # 空订单守卫:此前空 items 会静默产出"1 托、毛重=托盘自重"的空货 PL
+    if not items:
+        raise ValueError("PL 生成失败:订单没有任何产品行(items 为空),拒绝生成装箱单")
+    if cartons_per_pallet is None or cartons_per_pallet <= 0:
+        raise ValueError(f"PL 生成失败:cartons_per_pallet 必须为正数,当前为 {cartons_per_pallet!r}")
+
     lines = []
     total_pcs = 0
     total_net = 0.0
     total_cartons = 0
 
+    from ..models.order_model import effective_weight_kg
     for item in items:
-        # 总净重优先级：weight_kg → weight_kg_per_piece * qty → kg_mpcs * qty/1000
-        # 注意：用 `is not None` 而非 falsy 检查，0.0 是合法重量（赠品/试样）
-        nw = item.weight_kg
+        # 总净重:统一派生口径(与 PI/CI 同源),见 order_model.effective_weight_kg
+        nw = effective_weight_kg(item)
         if nw is None:
-            wpp = getattr(item, "weight_kg_per_piece", None)
-            if wpp is not None:
-                nw = wpp * item.quantity
-            elif item.kg_mpcs is not None:
-                nw = item.kg_mpcs * item.quantity / 1000
-            else:
-                nw = 0
+            nw = 0
 
         # 箱数算法优先级：pcs_per_carton（按件） > kg_per_carton_override（覆盖）> 全局 kg_per_carton
         # 注意：用 `is not None` 区分"用户没填"和"用户填了 0"

@@ -107,8 +107,10 @@ def assemble(
 
     # ── 3. 构建 order info ──
     now = datetime.now()
-    currency = rfq.get("currency", fmt_defaults.get("currency", "CNY"))
-    price_unit = rfq.get("price_unit", fmt_defaults.get("price_unit", "CNY/MPCS"))
+    # `or` 兜底：rfq 里键存在但值为 null 时，.get 的默认值不生效
+    # （LLM 返回 "price_unit": null 曾让 PI 的 .upper() 直接崩溃）
+    currency = rfq.get("currency") or fmt_defaults.get("currency", "CNY")
+    price_unit = rfq.get("price_unit") or fmt_defaults.get("price_unit", "CNY/MPCS")
     defaults = config.get("defaults", {})
 
     order = OrderInfo(
@@ -124,7 +126,8 @@ def assemble(
 
     # ── 4. 构建 items ──
     items = []
-    for i, raw_item in enumerate(rfq.get("items", []), start=1):
+    # `or []`：items 键存在但值为 null 时，.get 的默认值不生效（None 不可迭代）
+    for i, raw_item in enumerate(rfq.get("items") or [], start=1):
         item = OrderItem(
             no=i,
             item_uuid=OrderItem.generate_uuid(),

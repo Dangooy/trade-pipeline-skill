@@ -183,14 +183,31 @@ class QuoteWriter(BaseWriter):
         row += 1
 
         # ── Data rows ──────────────────────────────────────────
+        from ..models.amounts import amount_formula, PricingMode
         data_start_row = row
         no = 1
         for item in items:
             ws.row_dimensions[row].height = 15
+            # 第 7 列：重量模式写重量；非重量模式写"活"金额公式（此前表头写着
+            # Amount 但固定写入 weight_kg，金额从未被计算——列恒空或显示公斤数）。
+            # 公式引用单价列 F：销售填价后金额自动算出。
+            col7_formula = None
+            if has_weight:
+                col7_val = getattr(item, "weight_kg", None)
+            else:
+                mode = PricingMode.from_price_unit(price_unit)
+                if mode is PricingMode.PER_TON:
+                    # 吨计价需重量数据，非重量模式无从计算，诚实留空
+                    col7_val = None
+                else:
+                    col7_val = None
+                    col7_formula = amount_formula(
+                        price_unit, qty_cell=f"E{row}", weight_cell=f"E{row}",
+                        price_cell=f"F{row}")
             vals = [no, getattr(item, "barcode", ""), item.description,
                     getattr(item, "unit", "pcs"), item.quantity,
                     getattr(item, "unit_price", None),
-                    getattr(item, "weight_kg", None),
+                    col7_val,
                     getattr(item, "qty_box", None)]
 
             for col_i, v in enumerate(vals, 1):
@@ -209,6 +226,12 @@ class QuoteWriter(BaseWriter):
                         left=_thin("FFD700"),
                         right=_thin("FFD700"),
                     )
+            # 金额公式列（自有可信公式，绕过输入净化），沿用同行样式
+            if col7_formula:
+                fc = ws.cell(row, 7, col7_formula)
+                fc.font = _fnt()
+                fc.border = Border(bottom=_thin())
+                fc.number_format = "#,##0.00"
 
             uuid_cell = ws.cell(row, uuid_col_idx, item.item_uuid)
             uuid_cell.font = Font(name=FONT_NAME, size=1, color="FFFFFF")
