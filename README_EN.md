@@ -41,12 +41,12 @@ Trade Pipeline's solution is simple: **maintain a single order record, and gener
 
 | Document | Description |
 |------|------|
-| 📋 **Quotation** | Company letterhead, product line items, unit price column left blank for you to fill in |
+| 📋 **Quotation** | Company letterhead, product line items, unit price column left blank for you to fill in, amount column auto-calculates as you fill |
 | 📄 **Proforma Invoice (PI)** | Seller/buyer information, payment terms, trade terms |
 | 📄 **Commercial Invoice (CI)** | Bilingual (Chinese/English) header, shipping marks, shipment info, SAY amount |
 | 📦 **Packing List (PL)** | Per-carton breakdown, carton count/weight/quantity, pallet summary |
 
-**Quotation** — fill in unit prices in the yellow-highlighted column, then write them back to the order record with one click:
+**Quotation** — fill in unit prices in the yellow-highlighted column (amounts calculate automatically); write them back to the order record with one click:
 
 ![Quotation](docs/2601_quotation.png)
 
@@ -382,6 +382,11 @@ This means:
 MIT — free to use, free to modify.
 
 ---
+
+<p align="center">
+  <b>Curious what changed in each release?</b><br>
+  <a href="https://github.com/Dangooy/trade-pipeline-skill/releases">Release notes</a> (full changelog in CHANGELOG.md)
+</p>
 
 <p align="center">
   <b>Ran into a problem?</b><br>
