@@ -41,6 +41,7 @@ Second adversarial-audit remediation (frozen-criteria benchmark round). An exter
 ### Changed
 - **Dependency upper bounds (T8)** (pyproject.toml, requirements.txt): `openpyxl<4`, `pyyaml<7`, `anthropic<2`, `pytest<9`, `pytest-cov<7`, `ruff<1` — a major-version release of any dependency can no longer break a fresh install silently.
 
+[1.4.1]: https://github.com/Dangooy/trade-pipeline-skill/releases/tag/v1.4.1
 [1.4.0]: https://github.com/Dangooy/trade-pipeline-skill/releases/tag/v1.4.0
 
 ## [1.3.0] - 2026-07-09
