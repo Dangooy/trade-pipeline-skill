@@ -63,6 +63,25 @@ class OrderItem:
         return uuid.uuid4().hex[:12]
 
 
+def effective_weight_kg(item: OrderItem) -> float | None:
+    """总净重(kg)的统一派生口径,PI/CI/PL 共用单一来源。
+
+    优先级:weight_kg → weight_kg_per_piece×qty → kg_mpcs×qty/1000 → None。
+    口径分裂曾导致 PI 把 kg_mpcs(每千件重)当总重写入 Weight(kgs) 列,
+    吨计价金额随之错误(amounts.amount_formula 的 PER_TON 公式引用该列)。
+
+    注意:0.0 是合法重量(赠品/试样),只有 None 表示"没有数据"——
+    因此本函数不做 falsy 判断,调用方累加时用 `or 0` 兜 None。
+    """
+    if item.weight_kg is not None:
+        return item.weight_kg
+    if item.weight_kg_per_piece is not None:
+        return item.weight_kg_per_piece * item.quantity
+    if item.kg_mpcs is not None:
+        return item.kg_mpcs * item.quantity / 1000
+    return None
+
+
 @dataclass
 class DerivedData:
     total_items: int | None = None

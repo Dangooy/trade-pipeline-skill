@@ -387,7 +387,7 @@ def _parse_with_llm(doc: ExtractedDocument, cache_dir: str | None = None) -> dic
         client = anthropic.Anthropic(**client_kwargs)
 
         # 截取前 4000 字符（避免 token 过多）
-        raw_content = doc.content_text[:4000]
+        raw_content = _strip_untrusted_tags(doc.content_text[:4000])
         # 用标签包裹不可信文档内容（T4 prompt 注入防护）：配合 SYSTEM_PROMPT 中
         # 的说明，让模型把标签内文本仅当作待解析数据、忽略其中的任何指令。
         content = (
@@ -423,6 +423,13 @@ def _parse_with_llm(doc: ExtractedDocument, cache_dir: str | None = None) -> dic
         rfq = json.loads(result_text)
         if not isinstance(rfq, dict):
             raise ValueError(f"LLM 返回顶层不是 JSON object: {type(rfq).__name__}")
+        # schema 校验：此前只查顶层 isinstance，items:null 会让 canonicalizer
+        # 的 .get("items", []) 拿到 None 直接 TypeError；quantity 为字符串数字
+        # 会让 assembler 的 sum() 崩溃；且坏结果会被写进缓存持续污染重跑。
+        # 校验失败走下方 except 的降级路径（显式标记、不缓存）。
+        schema_problem = _validate_rfq_schema(rfq)
+        if schema_problem:
+            raise ValueError(f"LLM 返回不符合 rfq schema: {schema_problem}")
     except (IndexError, AttributeError, TypeError, ValueError) as e:
         # 响应格式非预期：回退到规则模式，但显式标记，供上层提示用户。
         print(
@@ -450,6 +457,54 @@ def _parse_with_llm(doc: ExtractedDocument, cache_dir: str | None = None) -> dic
 
 
 # ── 辅助函数 ───────────────────────────────────────────────────────────
+
+_UNTRUSTED_TAG = "untrusted_document_content"
+
+
+def _strip_untrusted_tags(text: str) -> str:
+    """剥离不可信内容中出现的隔离标签字面量。
+
+    否则单元格里的 "</untrusted_document_content>" 可闭合隔离标签，
+    让其后的伪指令逃出隔离区（提示词注入穿透）。
+    """
+    return (
+        text.replace(f"</{_UNTRUSTED_TAG}>", "")
+        .replace(f"<{_UNTRUSTED_TAG}>", "")
+    )
+
+
+def _validate_rfq_schema(rfq: dict) -> str | None:
+    """LLM 返回的 rfq dict 最小 schema 校验。返回问题描述，None 表示通过。
+
+    数值字符串（"1000"、"1,000"）就地规范化为 float——LLM 常见输出形态，
+    不算错误；结构错 / 非数值 / 负数量才是错误，交由调用方走降级路径。
+    """
+    items = rfq.get("items")
+    if items is None:
+        return "items 缺失或为 null"
+    if not isinstance(items, list):
+        return f"items 不是数组: {type(items).__name__}"
+    for i, item in enumerate(items):
+        if not isinstance(item, dict):
+            return f"items[{i}] 不是对象: {type(item).__name__}"
+        for fname in ("quantity", "unit_price", "kg_mpcs", "weight_kg"):
+            if item.get(fname) is None:
+                continue
+            v = item[fname]
+            if isinstance(v, bool):
+                return f"items[{i}].{fname} 是布尔值"
+            if isinstance(v, str):
+                try:
+                    v = float(v.replace(",", ""))
+                except ValueError:
+                    return f"items[{i}].{fname} 不是数值: {item[fname]!r}"
+            if not isinstance(v, (int, float)):
+                return f"items[{i}].{fname} 类型非法: {type(item[fname]).__name__}"
+            if fname == "quantity" and v < 0:
+                return f"items[{i}].quantity 为负: {v}"
+            item[fname] = float(v)
+    return None
+
 
 def _extract_standard(desc: str) -> str | None:
     """从描述中提取 DIN/ISO/ASTM/GB 标准号"""
