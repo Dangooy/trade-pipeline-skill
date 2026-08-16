@@ -199,3 +199,59 @@ def test_alias_only_matches_exactly_not_as_substring():
     # 别名作为子串出现在更长的无关名称里 → 不得命中
     with pytest.raises(BuyerMatchError):
         match_buyer("GF Global Supplies Inc", None, None, config=NEG_CONFIG)
+
+
+# ── B1 回归防线：法律词出现在名字**中间**时不得被剥除 ──────────────────
+#
+# 修复前 _core_name 从任意位置剥后缀 token："Alpha Co Trading Ltd" 的中间
+# "co" 被剥掉 → 核心名 "alpha trading"，与另一家 "Alpha Trading LLC" 的
+# 核心名相等 → 唯一命中即接受 → A 客户的单据抬头写上 B 客户。
+# 修复后只剥开头连续段（俄语前缀）+ 结尾连续段（英语后缀链），中间保留。
+
+ALPHA_CONFIG = {
+    "buyers": {
+        "alpha_trading": {
+            "name_en": "Alpha Trading LLC",
+            "name_ru": None,
+            "legal_names": ["Alpha Trading LLC"],
+            "aliases": [],
+            "address": "Berlin, DE",
+        }
+    }
+}
+
+
+@pytest.mark.parametrize("extracted", [
+    "Alpha Co Trading Ltd",        # 中间 "co"：修复前剥掉后撞 alpha trading
+    "Alpha Holdings Trading Ltd",  # 中间 "holdings"：同型碰撞
+    "Alpha Limited Trading Co",    # 中间 "limited"
+])
+def test_mid_position_legal_word_is_kept_and_rejected(extracted):
+    """名字中间的法律词不得剥除——剥除会造成跨公司核心名碰撞，必须硬阻断。"""
+    with pytest.raises(BuyerMatchError):
+        match_buyer(extracted, None, None, config=ALPHA_CONFIG)
+
+
+def test_core_name_strips_leading_and_trailing_runs_only():
+    """新语义直接固化：只剥首段+尾段的后缀 run，中间保留。"""
+    from trade_pipeline.understanding.buyer_matcher import _core_name
+    assert _core_name("alpha co trading ltd") == "alpha co trading"
+    assert _core_name("alpha ltd trading co") == "alpha ltd trading"
+    assert _core_name("ооо метиз трейдинг") == "метиз трейдинг"
+    assert _core_name("global fasteners limited liability company") == "global fasteners"
+    assert _core_name("global fasteners llc.") == "global fasteners"
+
+
+def test_russian_prefix_fuzzy_still_matches():
+    """俄语法律形式是前缀：剥前缀后的核心名模糊匹配必须继续工作。"""
+    assert match_buyer(
+        'ООО «Метиз Трейдинг»'.lower(), None, None, config=SAMPLE_CONFIG
+    ) == "metiz_trading"
+    # 提取名无前缀 vs 配置带前缀 → 核心名仍相等（前缀只在首段剥）
+    assert match_buyer("Metiz Trading", None, None, config=SAMPLE_CONFIG) == "metiz_trading"
+
+
+def test_all_suffix_name_yields_empty_core_and_no_match():
+    """名字全是法律词时核心名为空,不得参与模糊匹配(空串守卫)。"""
+    with pytest.raises(BuyerMatchError):
+        match_buyer("Ltd Co LLC", None, None, config=ALPHA_CONFIG)

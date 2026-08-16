@@ -55,16 +55,30 @@ def normalize(name: str) -> str:
 
 def _core_name(norm: str) -> str:
     """
-    剥离法律形式后缀，得到公司"核心名"。
+    剥离法律形式词，得到公司"核心名"。只剥**开头连续段 + 结尾连续段**，
+    不从名字中间剥。
 
-    "global fasteners llc"        → "global fasteners"
-    "global fasteners llc."       → "global fasteners"（token 级剥标点）
-    "ооо метиз трейдинг"          → "метиз трейдинг"
-    "global fasteners trading llc" → "global fasteners trading"
+    "global fasteners llc"         → "global fasteners"（英语后缀在结尾）
+    "global fasteners llc."        → "global fasteners"（token 级剥标点）
+    "ооо метиз трейдинг"           → "метиз трейдинг"（俄语法律形式是前缀）
+    "global fasteners trading llc" → "global fasteners trading"（trading 是业务词，不剥）
+    "global fasteners limited liability company" → "global fasteners"（结尾连续后缀链）
+
+    中间不剥的原因（B1 修复）："Alpha Co Trading Ltd" 若把中间的 "co" 剥掉，
+    核心名变成 "alpha trading"，与另一家 "Alpha Trading LLC" 的核心名相等，
+    唯一命中即接受——A 客户的单据抬头会写上 B 客户。中间含法律词的名字
+    （"Alpha Ltd Trading Co" → "alpha ltd trading"）宁可匹配不上进 review
+    人工确认，也不冒错配风险。
     """
     tokens = [t.strip(".,;:&()[]-") for t in norm.split()]
-    core = [t for t in tokens if t and t not in LEGAL_SUFFIX_TOKENS]
-    return " ".join(core)
+    tokens = [t for t in tokens if t]
+    i = 0
+    while i < len(tokens) and tokens[i] in LEGAL_SUFFIX_TOKENS:
+        i += 1
+    j = len(tokens)
+    while j > i and tokens[j - 1] in LEGAL_SUFFIX_TOKENS:
+        j -= 1
+    return " ".join(tokens[i:j])
 
 
 def match_buyer(
