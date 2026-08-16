@@ -7,6 +7,14 @@ on:
     branches: [main]
 
 jobs:
+  version-consistency:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check version consistency
+        run: python3 scripts/check_version.py
+
   test:
     runs-on: ubuntu-latest
     strategy:
