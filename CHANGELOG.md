@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.2] - 2026-08-16
+
+第二批外部审计修复（B 系列，完整记录见 `docs/adversarial-review-2608-external.md`）。
+
+### Fixed
+- **buyer 匹配中间剥除碰撞（B1）**（`understanding/buyer_matcher.py`）：`_core_name` 此前从名字**任意位置**剥法律后缀 token，`"Alpha Co Trading Ltd"` 中间的 `co` 被剥后核心名与另一家 `"Alpha Trading LLC"` 相等，唯一命中即接受——A 客户的单据抬头会写上 B 客户。现改为只剥开头连续段（俄语前缀惯例，如 `ООО`）+ 结尾连续段（英语后缀链，如 Limited Liability Company），中间的法律词保留。**行为变化**：部分此前静默匹配通过的输入现在会硬阻断进 review.json 人工确认——错配风险交还给人，这是修复目的。
+- **PL 每箱重与净重舍入不自洽（B3）**（`writers/pl_writer_lite.py`、`writers/ci_writer.py`、`validation/cross_doc.py`、`pipeline/main.py`）：此前行净重=真实净重、每箱重=round(净重/箱数)，100kg 分 3 箱时 33.33×3=99.99≠100，报关算术核查看的正是这组关系。现改为行净重=每箱重×箱数（单据内 `KGS/CTN×CTS=NET`、`Σ行净重=合计` 恒成立；与磅秤实重偏差 ≤0.005×箱数 kg，低于称重精度）；CI 页脚净重改为优先读 PL 回写的 `derived.total_net_weight`（与毛重 T1 的同源模式对称），PL 未运行时回退独立累加；新增跨单净重校验 `check_ci_pl_net_weight`（0.01 容差）接入两处生成流程。
+
+### Added
+- **版本一致性检查（B2）**（`scripts/check_version.py`、`.github/workflows/ci.yml`）：CI 新增独立 job，强制 `pyproject.toml` ↔ `.claude-plugin/plugin.json` 版本相等、且 CHANGELOG 有对应版本小节，违反即失败。防的是 v1.4.1 收尾时发现的真实事故——plugin.json 落后两个版本无人察觉。
+- 20 个新测试（276 → 296）：中间剥除碰撞负样本（"Alpha Co/Holdings/Limited Trading"）、核心名新语义固化、俄语前缀模糊回归、版本检查脚本（含对仓库自身）、PL 行自洽与整除不变、Excel 单元格级 D×C==F 断言（此前无任何 D 列断言）、CI 读 PL 回写净重与回退、端到端两单净重相等、跨单净重校验矩阵。
+
 ## [1.4.1] - 2026-08-15
 
 第三轮外部审计修复（问题编号 A1-A7，完整审计记录见 `docs/adversarial-review-2608-external.md`；与 2026-07 的两轮 T 系列审计不重叠）。本轮主题：**金额与重量路径上的字段口径一致性、输出校验**——这类路径错一个数，落到真实单据上就是直接的金钱或清关风险。
@@ -41,6 +53,7 @@ Second adversarial-audit remediation (frozen-criteria benchmark round). An exter
 ### Changed
 - **Dependency upper bounds (T8)** (pyproject.toml, requirements.txt): `openpyxl<4`, `pyyaml<7`, `anthropic<2`, `pytest<9`, `pytest-cov<7`, `ruff<1` — a major-version release of any dependency can no longer break a fresh install silently.
 
+[1.4.2]: https://github.com/Dangooy/trade-pipeline-skill/releases/tag/v1.4.2
 [1.4.1]: https://github.com/Dangooy/trade-pipeline-skill/releases/tag/v1.4.1
 [1.4.0]: https://github.com/Dangooy/trade-pipeline-skill/releases/tag/v1.4.0
 
