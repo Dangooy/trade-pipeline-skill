@@ -82,17 +82,23 @@ def _compute_packing(
             cartons = max(1, math.ceil(nw / eff_kg_per_carton)) if nw > 0 else 1
 
         kg_ctn = round(nw / cartons, 2) if cartons > 0 else 0
+        # B3:行净重 = 每箱重 × 箱数(而非真实净重),保证单据内
+        # "KGS/CTN × CTS = NET WEIGHT" 与 "Σ行净重 = 合计" 恒成立——
+        # 报关算术核查看的是单据内部自洽(100kg/3箱 → 33.33×3=99.99)。
+        # 与磅秤实重的偏差 ≤ 0.005×箱数 kg,远低于称重精度;CI 净重改读
+        # PL 回写的 total_net_weight,两单同源不会分叉。
+        row_net = round(kg_ctn * cartons, 2)
 
         lines.append(PackingLine(
             description=item.description,
             group_key=item.group_key or "",
             pcs=item.quantity,
-            net_weight_kg=round(nw, 2),
+            net_weight_kg=row_net,
             cartons=cartons,
             kg_per_carton=kg_ctn,
         ))
         total_pcs += item.quantity
-        total_net += nw
+        total_net += row_net
         total_cartons += cartons
 
     total_pallets = max(1, math.ceil(total_cartons / cartons_per_pallet))

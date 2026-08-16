@@ -348,7 +348,13 @@ class CIWriter(BaseWriter):
         # 统一派生口径(见 order_model.effective_weight_kg):此前只认 weight_kg,
         # 与 PL lite 的三来源派生分裂——只有 kg_mpcs 的商品 PL 显示真实净重、
         # CI 打 N.W.:0.00KGS,清关单证对不上。
-        nw = sum(effective_weight_kg(i) or 0 for i in items)
+        # B3:优先读 PL 回写的 total_net_weight(PL 先于 CI 生成,见 T1 顺序修复),
+        # 与毛重的同源模式对称——PL 行净重按"每箱重×箱数"自洽化后,
+        # CI 独立累加会与 PL 有 ≤几分钱的分叉,读回写值保证两单严格一致。
+        # 用 is not None 判断(0.0 是合法净重),PL 未运行时回退独立累加。
+        nw = model.derived.total_net_weight
+        if nw is None:
+            nw = sum(effective_weight_kg(i) or 0 for i in items)
         gw = model.derived.total_gross_weight or round(nw * 1.036, 2)
         _sc(ws, R, 1, value=f"N.W.:{nw:,.2f}KGS  G.W.:{gw:,.2f}KGS", font=_fnt(12))
         R += 1
