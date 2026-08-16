@@ -1,6 +1,6 @@
 {
   "name": "trade-pipeline",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "AI-powered foreign trade document pipeline: RFQ Excel -> Quotation -> PI -> CI -> PL. Single data model, UUID-anchored price write-back, config-driven multi-format support.",
   "author": "Dangooy",
   "license": "MIT",
