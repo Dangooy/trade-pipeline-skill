@@ -32,7 +32,10 @@ from trade_pipeline.validation.manual_completion import (
     ReviewItem, apply_review, generate_review,
 )
 from trade_pipeline.validation.engine import validate_order
-from trade_pipeline.validation.cross_doc import check_ci_pl_gross_weight
+from trade_pipeline.validation.cross_doc import (
+    check_ci_pl_gross_weight,
+    check_ci_pl_net_weight,
+)
 from trade_pipeline.validation.reporters import to_markdown, to_text
 
 ProgressFn = Callable[[str], None]
@@ -331,11 +334,15 @@ def _write_trade_docs(model, config: dict, output_dir: str, order_no: str,
         results["warnings"].append(msg)
         print(f"      ⚠ {msg}")
 
-    # 跨单校验：CI 毛重必须等于 PL 毛重（T1）。两者都成功时才比对。
+    # 跨单校验：CI 毛重必须等于 PL 毛重（T1）；净重同理（B3）。
     gw_warn = check_ci_pl_gross_weight(ci_info, pl_result)
     if gw_warn:
         results["warnings"].append(gw_warn)
         print(f"      ⚠ {gw_warn}")
+    nw_warn = check_ci_pl_net_weight(ci_info, pl_result)
+    if nw_warn:
+        results["warnings"].append(nw_warn)
+        print(f"      ⚠ {nw_warn}")
 
     return results
 
@@ -739,11 +746,15 @@ def run_price_update(
         print(f"  ⚠ CI 重新生成失败: {type(e).__name__}: {e}")
         result.setdefault("warnings", []).append(f"CI: {e}")
 
-    # 跨单校验：CI 毛重必须等于 PL 毛重（T1）。
+    # 跨单校验：CI 毛重必须等于 PL 毛重（T1）；净重同理（B3）。
     gw_warn = check_ci_pl_gross_weight(ci_info, pl_result)
     if gw_warn:
         result.setdefault("warnings", []).append(gw_warn)
         print(f"  ⚠ {gw_warn}")
+    nw_warn = check_ci_pl_net_weight(ci_info, pl_result)
+    if nw_warn:
+        result.setdefault("warnings", []).append(nw_warn)
+        print(f"  ⚠ {nw_warn}")
 
     return result
 
