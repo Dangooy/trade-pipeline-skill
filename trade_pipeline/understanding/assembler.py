@@ -160,12 +160,22 @@ def assemble(
     )
 
     # ── 6. 构建 meta ──
+    # C2:llm_parser 打的降级/截断标记此前在这里被硬编码("rules"/"clean")丢弃,
+    # 用户拿到降级或不完整结果却无从得知。现在写入 meta 供报告/后续校验消费。
+    degraded = bool(rfq.get("_llm_degraded"))
+    truncated = bool(rfq.get("_llm_truncated"))
+    notes = []
+    if degraded:
+        notes.append(str(rfq.get("_llm_degraded_reason") or "LLM 解析降级为规则模式"))
+    if truncated:
+        notes.append("LLM 解析仅覆盖询盘前 4000 字符,超出明细可能缺失")
     meta = OrderMeta(
         source_files=[rfq.get("source_file", "")],
         created_at=now.isoformat(),
         last_modified=now.isoformat(),
-        parser_model="rules",
-        review_status="clean",
+        parser_model="llm_fallback_rules" if degraded else str(rfq.get("_parser_model") or "rules"),
+        review_status="degraded" if (degraded or truncated) else "clean",
+        parser_notes="; ".join(notes),
     )
 
     model = OrderModel(
