@@ -386,7 +386,14 @@ def _parse_with_llm(doc: ExtractedDocument, cache_dir: str | None = None) -> dic
 
         client = anthropic.Anthropic(**client_kwargs)
 
-        # 截取前 4000 字符（避免 token 过多）
+        # 截取前 4000 字符（避免 token 过多）。
+        # C1:截断不再静默——超限时打 WARNING,并在结果上带 _llm_truncated 标记,
+        # 由 assembler 写进 meta(assembler 不再丢弃,见 C2),用户可见。
+        truncated = len(doc.content_text) > 4000
+        if truncated:
+            print(
+                f"WARNING: 询盘内容 {len(doc.content_text)} 字符超出 LLM 解析 4000 字符上限,"
+                f"仅前 4000 字符进入解析,超出部分的明细行可能缺失——请核对输出行数")
         raw_content = _strip_untrusted_tags(doc.content_text[:4000])
         # 用标签包裹不可信文档内容（T4 prompt 注入防护）：配合 SYSTEM_PROMPT 中
         # 的说明，让模型把标签内文本仅当作待解析数据、忽略其中的任何指令。
@@ -445,6 +452,10 @@ def _parse_with_llm(doc: ExtractedDocument, cache_dir: str | None = None) -> dic
     rfq.setdefault("source_file", doc.source_path)
     rfq.setdefault("has_weight", False)
     rfq.setdefault("price_unit", "CNY/MPCS")
+    # C1/C2:解析来源与截断标记,供 assembler 写入 meta(此前被硬编码丢弃)
+    rfq["_parser_model"] = "llm"
+    if truncated:
+        rfq["_llm_truncated"] = True
 
     # L2 缓存写入。缓存只是优化，写盘失败（磁盘满/权限）不应让解析结果作废。
     if cache:
@@ -516,12 +527,26 @@ def _extract_standard(desc: str) -> str | None:
 
 
 def _to_float(s: str) -> float:
-    """安全转 float"""
+    """安全转 float。
+
+    C4:支持欧洲数字格式(点作千分位、逗号作小数点),此前 "1.234,56"/"12,5"
+    被当美国格式处理成 123456/125,数量错一个数量级;解析失败不再静默归零,
+    打 WARNING 提示人工核对来源单元格。
+    """
     if not s or s.strip() == "" or s.strip().lower() == "none":
         return 0.0
+    t = s.strip()
+    # 欧洲格式判定:点按三位分组且逗号后 1-2 位小数("1.234,56"),或
+    # 逗号后 1-2 位小数且无点("12,5")——后者只可能是小数逗号,
+    # 美式千分位逗号后必是恰好三位
+    if re.fullmatch(r"-?\d{1,3}(\.\d{3})+,\d{1,2}", t) or re.fullmatch(r"-?\d+,\d{1,2}", t):
+        t = t.replace(".", "").replace(",", ".")
+    else:
+        t = t.replace(",", "")
     try:
-        return float(s.replace(",", ""))
+        return float(t)
     except (ValueError, TypeError):
+        print(f"WARNING: 数值无法解析,按 0 处理,请人工核对来源单元格: {s!r}")
         return 0.0
 
 

@@ -14,7 +14,7 @@ from openpyxl.styles import Font, Alignment
 from openpyxl.utils import get_column_letter
 
 from .base_writer import BaseWriter, sc as _sc, mc as _mc, brd as _brd
-from ..models.amounts import amount_formula, compute_amount
+from ..models.amounts import amount_formula, compute_amount, PricingMode
 from ..models.order_model import effective_weight_kg
 
 CALIBRI = "Calibri"
@@ -236,6 +236,14 @@ class CIWriter(BaseWriter):
 
         # ── 单位行 ──
         unit_label = "pcs" if model.order.format != "washers_mar" else "tons"
+        # C3:吨计价数量含小数(12,345.6 tons),整数格式会显示成 12,346 与
+        # PI(两位小数)不一致、与金额公式输入脱节;件计价保持整数
+        qty_fmt = (
+            "#,##0.00"
+            if model.order.format == "washers_mar"
+            or PricingMode.from_price_unit(price_unit) is PricingMode.PER_TON
+            else "#,##0"
+        )
         _sc(ws, R, 3, value=f"Order No.:{model.order.pi_number}",
             font=_fnt(11, bold=True))
         _sc(ws, R, 14, value=unit_label, font=_fnt(11), align=_aln("right"),
@@ -269,7 +277,7 @@ class CIWriter(BaseWriter):
 
             # N: qty
             _sc(ws, R, 14, value=item.quantity, font=_fnt(10), align=_aln("right"),
-                border=_brd(left="thin"), num_fmt='#,##0')
+                border=_brd(left="thin"), num_fmt=qty_fmt)
 
             # O: weight
             weight = item.weight_kg
