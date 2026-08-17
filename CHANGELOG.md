@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.3] - 2026-08-16
+
+第三批外部审计修复（C 系列，2608 审计遗留清单至此**清零**，记录见 `docs/adversarial-review-2608-external.md`）。
+
+### Fixed
+- **LLM 4000 字符截断静默丢行（C1，2607 审计即已点名）**（`understanding/llm_parser.py`）：询盘内容超 4000 字符时此前无任何信号——超出部分的明细行不进解析、结果照常缓存，用户无法得知数据不全。现在超限时打印 WARNING，并在结果上携带 `_llm_truncated` 标记，由 assembler 写入 `meta.parser_notes` 供用户与后续校验消费。
+- **解析降级标记被 assembler 丢弃（C2）**（`understanding/understanding/assembler.py`）：`llm_parser` 打的 `_llm_degraded` 标记此前在 assembler 里被硬编码（`parser_model="rules"`、`review_status="clean"`）覆盖，"显式标记降级"的设计落空——用户拿到的是降级结果却显示 clean。现在 `meta.parser_model`（llm / llm_fallback_rules / rules）、`meta.review_status`（clean / degraded）、`meta.parser_notes`（降级原因、截断提示）如实反映解析来源与质量。
+- **CI 吨计价数量列整数格式（C3）**（`writers/ci_writer.py`）：tons 数量如 12,345.6 被 `#,##0` 格式化成 12,346——与 PI 的两位小数不一致，显示值与金额公式输入脱节。吨计价（format 为 washers_mar 或 price_unit 含 TON）改为 `#,##0.00`，件计价保持整数不变。
+- **欧洲数字格式解析错误（C4）**（`understanding/llm_parser.py`）：`_to_float` 此前把欧洲格式当美式处理——`"1.234,56"` → 123456、`"12,5"` → 125（数量错一个数量级），无法解析时静默归 0。现在支持欧洲格式（点作千分位、逗号作小数点；歧义模式如 `"1.234"` 维持美式解读不猜），解析失败打印 WARNING 并返回 0.0，提示人工核对来源单元格。
+
+### Added
+- 15 个新测试（296 → 311）：欧洲格式矩阵（含负数、百万级分组、美式回归）、解析失败 WARNING 断言、assembler 消费降级/截断标记四种组合、CI 吨/件/吨单价三档数量格式。
+
 ## [1.4.2] - 2026-08-16
 
 第二批外部审计修复（B 系列，完整记录见 `docs/adversarial-review-2608-external.md`）。
@@ -53,6 +66,7 @@ Second adversarial-audit remediation (frozen-criteria benchmark round). An exter
 ### Changed
 - **Dependency upper bounds (T8)** (pyproject.toml, requirements.txt): `openpyxl<4`, `pyyaml<7`, `anthropic<2`, `pytest<9`, `pytest-cov<7`, `ruff<1` — a major-version release of any dependency can no longer break a fresh install silently.
 
+[1.4.3]: https://github.com/Dangooy/trade-pipeline-skill/releases/tag/v1.4.3
 [1.4.2]: https://github.com/Dangooy/trade-pipeline-skill/releases/tag/v1.4.2
 [1.4.1]: https://github.com/Dangooy/trade-pipeline-skill/releases/tag/v1.4.1
 [1.4.0]: https://github.com/Dangooy/trade-pipeline-skill/releases/tag/v1.4.0
