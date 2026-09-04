@@ -383,7 +383,7 @@ output/2601/
 
 ## 关于作者
 
-作者杨天机，更多外贸 AI skill 见 [tianji-skills](https://github.com/Dangooy/tianji-skills)（寻客/译盘/核单）。
+作者杨天机（Yang Tian · Ethan Yang），更多外贸 AI skill 见 [tianji-skills](https://github.com/Dangooy/tianji-skills)（寻客/译盘/核单）；个人公开入口见 [GitHub Profile](https://github.com/Dangooy)。
 
 ---
 
