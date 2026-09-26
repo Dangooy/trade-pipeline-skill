@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **`.gitattributes`**：声明 `* text=auto eol=lf` 与二进制类型。属**预防性**措施——本仓库未实际发生过换行符问题，但仓库曾在 Windows 上开发，而共用同一套代码的私有仓库出现过「工作树 CRLF / 仓库 LF」导致的假改动。声明后 git 在比较与提交时统一归一化为 LF，这类假改动不会再出现。
+
 ### Changed
 
 - **CI 加固**（`.github/workflows/ci.yml`、`pyproject.toml`）：

@@ -1,0 +1,35 @@
+# 换行符与二进制处理规则。
+#
+# 背景：本仓库曾在 Windows 上开发。因为缺少本文件，同一个「干净」工作树在
+# Mac 上会显示 96 个文件被修改 —— 实际内容零变化，只是工作树里的换行符是
+# CRLF（Windows 习惯）而仓库里存的是 LF。git 无从区分「排版差异」和「真实
+# 改动」，只能全部报成修改。加本文件后，git 会在比较与提交时统一归一化为
+# LF，这类假改动不会再出现。
+#
+# `text=auto eol=lf` 的三层含义：
+#   1. 提交时把文本文件归一化为 LF 存入仓库 —— 仓库内永远只有一种换行符
+#   2. 检出时也一律给 LF，任何平台一致
+#   3. git 因此能识别「只有换行符不同」，不再报成修改
+# Python / Markdown / YAML / TOML 在 Windows 上读 LF 均无问题，
+# 故不需要给它们开 CRLF 例外。
+
+* text=auto eol=lf
+
+# 二进制文件：不做任何换行符或编码转换
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.xlsx  binary
+*.xls   binary
+*.zip   binary
+*.exe   binary
+*.pdf   binary
+*.woff  binary
+*.woff2 binary
+
+# Windows 批处理脚本若将来加入，保留 CRLF（cmd.exe 对 LF 支持不佳）。
+# 位置在 `*` 之后 —— gitattributes 里后出现的规则覆盖先出现的。
+*.bat text eol=crlf
+*.cmd text eol=crlf
