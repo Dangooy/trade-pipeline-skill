@@ -37,6 +37,25 @@ trade_pipeline = ["config/*.yaml"]
 line-length = 100
 target-version = "py311"
 
+[tool.coverage.report]
+# 覆盖率门槛。改动前实测（同一份代码、不同环境会有小幅差异）：
+#   CI (Python 3.12, coverage 7.16.0)：3099 语句 / 566 未覆盖 / 82%
+#   本机 (Python 3.14, coverage 7.16.1)：3041 语句 / 566 未覆盖 / 81.39%
+# 语句总数随 Python 版本略有不同（版本分支），未覆盖率一致。
+#
+# 为什么必须有这个数字：此前 CI 只跑 --cov-report=term 把覆盖率打印到日志，
+# 但不强制。结果是覆盖率可以一路悄声下滑到 60% 而构建依然是绿的——
+# 报告躺在日志里，没有人每天去翻。
+#
+# 为什么定在 80（低于实测值）：留一点缓冲，正常重构时上下浮动不应误报；
+# 但持续退化必须被拦下。这个数字只应往上调，不应往下调；
+# 确实需要下调时，必须在本文件写明原因。
+#
+# 放在 pyproject 而非 CI 的 --cov-fail-under，是为了本地 `pytest --cov` 也受同一
+# 门槛管理，且门槛只存在一处——避免又一处“文档与代码各写一个数”的漂移。
+# CI 里不重复写这个数字，只给指针。
+fail_under = 80
+
 [tool.ruff.lint]
 # Pin the rule set explicitly. Ruff's *default* selection widens between
 # releases, and CI installs ruff unpinned (`ruff>=0.4.0,<1`) — so relying on

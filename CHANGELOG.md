@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **CI 加固**（`.github/workflows/ci.yml`、`pyproject.toml`）：
+  - **新增覆盖率门槛 80%**（`[tool.coverage.report] fail_under`）。此前 CI 只跑 `--cov-report=term`，把覆盖率打印到日志却**不强制**——覆盖率可以一路悄声下滑而构建依然是绿的。改动前实测 82%（3099 语句 / 566 未覆盖），门槛留了一点缓冲。放在 pyproject 而非 CI 的 `--cov-fail-under`，是为了本地 `pytest --cov` 也受同一处配置管理，且门槛只存在一处。
+  - **ruff 改为检查全仓库**（原为 `ruff check trade_pipeline/ tests/`）。此前 `scripts/` 与 `examples/` 下的 4 个 Python 文件不被检查，其中 `scripts/check_version.py` 正是版本一致性检查自身。已实测这 4 个文件本就通过 ruff，扩大范围无新增告警。
+  - **Actions 升级**：`actions/checkout` v4 → v7、`actions/setup-python` v5 → v7。旧版 action 依赖的运行时会被逐步淘汰，届时会出现与代码改动无关的构建失败。
+  - **矩阵加 `fail-fast: false`**：此前一个 Python 版本失败会直接取消另一个，看不出问题是出在单个版本还是全部。
+
 ## [1.4.3] - 2026-08-16
 
 第三批外部审计修复（C 系列，2608 审计遗留清单至此**清零**，记录见 `docs/adversarial-review-2608-external.md`）。

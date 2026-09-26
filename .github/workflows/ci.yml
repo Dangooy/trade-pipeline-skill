@@ -10,7 +10,7 @@ jobs:
   version-consistency:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Check version consistency
         run: python3 scripts/check_version.py
@@ -18,22 +18,29 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      # 一个 Python 版本失败不取消其他版本 —— 否则 3.11 挂了 3.12 会直接被取消，
+      # 就看不出「只有 3.11 有问题」还是「两个都挂了」。
+      fail-fast: false
       matrix:
         python-version: ["3.11", "3.12"]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
 
       - name: Install dependencies
         run: pip install -e ".[test]"
 
+      # 查全仓库，不只 trade_pipeline/ 与 tests/ —— 此前 scripts/ 与 examples/
+      # 下的 Python 文件不被检查（含 CI 自己在用的 scripts/check_version.py）。
       - name: Lint with ruff
-        run: ruff check trade_pipeline/ tests/
+        run: ruff check .
 
+      # 覆盖率门槛不写在这里：它在 pyproject.toml 的 [tool.coverage.report] fail_under，
+      # 本地 pytest --cov 与 CI 受同一处配置管理。
       - name: Run tests
         run: pytest tests/ -v --cov=trade_pipeline --cov-report=term
