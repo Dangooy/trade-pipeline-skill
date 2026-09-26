@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **ruff 改为检查全仓库**（原为 `ruff check trade_pipeline/ tests/`）。此前 `scripts/` 与 `examples/` 下的 4 个 Python 文件不被检查，其中 `scripts/check_version.py` 正是版本一致性检查自身。已实测这 4 个文件本就通过 ruff，扩大范围无新增告警。
   - **Actions 升级**：`actions/checkout` v4 → v7、`actions/setup-python` v5 → v7。旧版 action 依赖的运行时会被逐步淘汰，届时会出现与代码改动无关的构建失败。
   - **矩阵加 `fail-fast: false`**：此前一个 Python 版本失败会直接取消另一个，看不出问题是出在单个版本还是全部。
+  - **矩阵新增 Python 3.13**（原为 3.11 / 3.12）：`pyproject.toml` 声明 `requires-python = ">=3.11"`，但此前只测到 3.12，意味着 3.13+ 属于「声称支持却未验证」。本机 Python 3.14 跑全部 311 个测试通过，是本次扩测的依据。
 
 ## [1.4.3] - 2026-08-16
 

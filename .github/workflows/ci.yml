@@ -22,7 +22,10 @@ jobs:
       # 就看不出「只有 3.11 有问题」还是「两个都挂了」。
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12"]
+        # 3.13 于 2026-09-26 加入：pyproject 声明 requires-python = ">=3.11"，
+        # 但此前只测到 3.12，意味着 3.13+ 属于“声称支持却未验证”。
+        # 本机 Python 3.14 跑全部 311 个测试通过，是本次扩测的依据。
+        python-version: ["3.11", "3.12", "3.13"]
 
     steps:
       - uses: actions/checkout@v7
