@@ -59,6 +59,13 @@ defaults:
   ci_number_pattern: "CI-{order_no}"
   quote_no_pattern: "QT-{order_no}"
   date_format: "%d %B %Y"
+  # 业务时区（IANA 名称），决定单据上印的日期。
+  # 不填 = 跟运行机器的时区走。生产环境常是 UTC 服务器或 CI runner，
+  # 而 Asia/Shanghai 是 UTC+8、Asia/Tokyo 是 UTC+9——当地凌晨 00:00 到
+  # 08:00/09:00 之间生成的单据会被印成**前一天**。填上它可让日期与
+  # 运行环境无关，始终是业务所在地的那一天。
+  # 示例：Asia/Shanghai / Asia/Tokyo / Europe/London / Australia/Sydney
+  business_timezone: null
 
 packing:
   carton_weight_kg: 25

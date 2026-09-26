@@ -97,6 +97,13 @@ def run_init():
     currency = CURRENCY_OPTIONS[currency_choice]
 
     port = _ask("Default port of loading", "QINGDAO,CHINA")
+    # 业务时区：决定单据上印的日期。不填则跟着运行机器的时区走——
+    # 在 UTC 服务器上会让领先 UTC 的业务地区（亚洲为主）
+    # 当地凌晨生成的单据印成前一天。故默认给一个常用值，可自行改。
+    business_timezone = _ask(
+        "Business timezone (IANA name, e.g. Asia/Shanghai, Asia/Tokyo)",
+        "Asia/Shanghai",
+    )
 
     payment = _ask("Payment terms", "30% T/T deposit; 70% before shipment")
     lead_time = _ask("Lead time", "45-60 days after deposit")
@@ -182,6 +189,7 @@ def run_init():
             "ci_number_pattern": "CI-{order_no}",
             "quote_no_pattern": "QT-{order_no}",
             "date_format": "%d %B %Y",
+            "business_timezone": business_timezone,
         },
         "packing": {
             "carton_weight_kg": 25,

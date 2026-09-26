@@ -14,12 +14,42 @@ understanding/assembler.py — RFQ Canonical → OrderModel 组装
   - 让 seller_id 指向不存在的实体（resolve_entities 抛 EntityResolutionError）
 """
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from ..models.order_model import (
     OrderModel, OrderRefs, OrderInfo, OrderItem,
     DerivedData, OrderMeta, ResolvedEntities,
 )
 from .buyer_matcher import match_buyer
+
+
+def resolve_business_tz(config):
+    """解析业务时区，用于生成单据上的日期。
+
+    读 `config.defaults.business_timezone`（IANA 名称，如 Asia/Shanghai）。
+    未配置时返回 None，即沿用宿主机本地时区。
+
+    为什么必须可配置，而不能直接用裸 `datetime.now()`：
+    `order.date` 会直接印在报价单 / PI / CI / PL 上。裸 `now()` 取的是**运行
+    机器**的时区，而生产环境常是 UTC 服务器或 CI runner。当业务时区领先 UTC
+    时（Asia/Shanghai = UTC+8、Asia/Tokyo = UTC+9），当地当天 00:00 到
+    08:00 / 09:00 之间生成的单据会被印成**前一天**——而单据日期错了在清关和
+    收汇上都是实际问题。显式配置后，无论跑在哪台机器上，日期都是业务所在地的
+    那一天。
+
+    配置了非法时区名则**响亮失败**，不静默回退：静默回退会重新制造
+    「日期跟着运行环境走」这个正被修复的 bug。
+    """
+    name = (config or {}).get("defaults", {}).get("business_timezone")
+    if not name:
+        return None
+    try:
+        return ZoneInfo(str(name))
+    except Exception as exc:  # ZoneInfoNotFoundError / ValueError 等
+        raise ValueError(
+            f"配置项 defaults.business_timezone 不是合法的 IANA 时区名：{name!r}。"
+            "示例：Asia/Shanghai、Asia/Tokyo、Europe/London、Australia/Sydney。"
+        ) from exc
 
 
 class EntityResolutionError(Exception):
@@ -106,7 +136,9 @@ def assemble(
     )
 
     # ── 3. 构建 order info ──
-    now = datetime.now()
+    # 业务时区优先（config.defaults.business_timezone）；未配置时 datetime.now(None)
+    # 等同 datetime.now()，即沿用宿主机本地时区（与旧行为一致）。
+    now = datetime.now(resolve_business_tz(config))
     # `or` 兜底：rfq 里键存在但值为 null 时，.get 的默认值不生效
     # （LLM 返回 "price_unit": null 曾让 PI 的 .upper() 直接崩溃）
     currency = rfq.get("currency") or fmt_defaults.get("currency", "CNY")

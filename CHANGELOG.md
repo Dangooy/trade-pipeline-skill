@@ -5,20 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.4.4] - 2026-09-26
+
+修复一个会让单据印错日期的真实缺陷，并加固 CI。
+
+### Fixed
+
+- **单据日期跟着运行机器的时区走，在 UTC 服务器上会印错一天**（`understanding/assembler.py`）：`order.date` 会直接印在报价单 / PI / CI / PL 上，而旧实现用裸 `datetime.now()`，取的是**运行机器**的时区。生产环境常是 UTC 服务器或 CI runner，而 Asia/Shanghai 是 UTC+8、Asia/Tokyo 是 UTC+9 —— 当地当天 00:00 到 08:00 / 09:00 之间生成的单据会被印成**前一天**。实测：把宿主机冻结在 UTC `2026-07-26 23:30`，旧实现印 `26 July 2026`，正确应为 `27 July 2026`。
 
 ### Added
 
-- **`.gitattributes`**：声明 `* text=auto eol=lf` 与二进制类型。属**预防性**措施——本仓库未实际发生过换行符问题，但仓库曾在 Windows 上开发，而共用同一套代码的私有仓库出现过「工作树 CRLF / 仓库 LF」导致的假改动。声明后 git 在比较与提交时统一归一化为 LF，这类假改动不会再出现。
+- **`defaults.business_timezone` 配置项**（IANA 时区名，如 `Asia/Shanghai`）：填上后单据日期与运行环境无关，始终是业务所在地的那一天；**不填则保持旧的本地时区行为**，不静默改变已有用户的结果；填了非法时区名则**响亮失败**并指明配置项——静默回退会重新制造正好在修的 bug，而单据日期错了在清关与收汇上都是实际问题。
+- **初始化向导新增一问**，引导填写业务时区（默认 `Asia/Shanghai`）；内置 `config/config.yaml` 同步给出说明与不配置的后果。
+- **`tests/test_business_timezone.py`（23 个用例）**：`resolve_business_tz` 的未配置 / 合法 / 非法三态，以及走真实 `assemble()` 路径的跨日历日断言（四种时区得出不同日期）、未配置时保持旧行为、`date_format` 不受影响、配置模板与向导均写出该键。
+- **`.gitattributes`**：声明 `* text=auto eol=lf` 与二进制类型。属**预防性**措施——本仓库未实际发生过换行符问题，但共用同一套代码的私有仓库出现过「工作树 CRLF / 仓库 LF」导致的假改动。声明后 git 在比较与提交时统一归一化为 LF，这类假改动不会再出现。
 
 ### Changed
 
 - **CI 加固**（`.github/workflows/ci.yml`、`pyproject.toml`）：
   - **新增覆盖率门槛 80%**（`[tool.coverage.report] fail_under`）。此前 CI 只跑 `--cov-report=term`，把覆盖率打印到日志却**不强制**——覆盖率可以一路悄声下滑而构建依然是绿的。改动前实测 82%（3099 语句 / 566 未覆盖），门槛留了一点缓冲。放在 pyproject 而非 CI 的 `--cov-fail-under`，是为了本地 `pytest --cov` 也受同一处配置管理，且门槛只存在一处。
-  - **ruff 改为检查全仓库**（原为 `ruff check trade_pipeline/ tests/`）。此前 `scripts/` 与 `examples/` 下的 4 个 Python 文件不被检查，其中 `scripts/check_version.py` 正是版本一致性检查自身。已实测这 4 个文件本就通过 ruff，扩大范围无新增告警。
+  - **lint 改为检查全仓库**（原为 `ruff check trade_pipeline/ tests/`）。此前 `scripts/` 与 `examples/` 下的 4 个 Python 文件不被检查，其中 `scripts/check_version.py` 正是版本一致性检查自身。已实测这 4 个文件本就通过 ruff，扩大范围无新增告警。
   - **Actions 升级**：`actions/checkout` v4 → v7、`actions/setup-python` v5 → v7。旧版 action 依赖的运行时会被逐步淘汰，届时会出现与代码改动无关的构建失败。
   - **矩阵加 `fail-fast: false`**：此前一个 Python 版本失败会直接取消另一个，看不出问题是出在单个版本还是全部。
-  - **矩阵新增 Python 3.13**（原为 3.11 / 3.12）：`pyproject.toml` 声明 `requires-python = ">=3.11"`，但此前只测到 3.12，意味着 3.13+ 属于「声称支持却未验证」。本机 Python 3.14 跑全部 311 个测试通过，是本次扩测的依据。
+  - **矩阵新增 Python 3.13**（原为 3.11 / 3.12）：`pyproject.toml` 声明 `requires-python = ">=3.11"`，但此前只测到 3.12，意味着 3.13+ 属于「声称支持却未验证」。
 
 ## [1.4.3] - 2026-08-16
 

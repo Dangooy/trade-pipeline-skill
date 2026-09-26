@@ -121,6 +121,7 @@ def test_run_init_minimal_flow_writes_config(monkeypatch, isolated_config):
         "1",                       # terms (FOB)
         "1",                       # currency (USD)
         "QINGDAO,CHINA",           # port
+        "Asia/Shanghai",           # business_timezone (新增问题)
         "30% TT",                  # payment
         "45 days",                 # lead_time
         "10 days",                 # validity
@@ -157,6 +158,7 @@ def test_run_init_with_buyer_flow_writes_buyer(monkeypatch, isolated_config):
         "2",                       # terms (CIF)
         "1",                       # currency (USD)
         "SHANGHAI,CHINA",          # port
+        "Asia/Shanghai",           # business_timezone (新增问题)
         "",                        # payment (default)
         "",                        # lead_time (default)
         "",                        # validity (default)
@@ -192,6 +194,7 @@ def test_run_init_cny_uses_mpcs_pricing(monkeypatch, isolated_config):
         "1",                       # terms (FOB)
         "2",                       # currency (CNY) → 跳过 pu_choice
         "BEIJING,CHINA",           # port
+        "Asia/Shanghai",           # business_timezone (新增问题)
         "",                        # payment
         "",                        # lead_time
         "",                        # validity
