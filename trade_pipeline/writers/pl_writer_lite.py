@@ -152,6 +152,61 @@ def _check_weight_completeness(items) -> list:
     return missing
 
 
+def resolve_packing_params(config, review):
+    """解析装箱参数（review.pallet > config.packing > module defaults）。
+
+    抽出为单一来源（B-1）：PL writer 和“出单前预算”都调它，保证用同一套参数。
+    两处各自解析参数是过去 CI/PL 数字分叉的根因之一。
+    """
+    packing_cfg = (config or {}).get("packing", {})
+    return {
+        "kg_per_carton": packing_cfg.get("carton_weight_kg", DEFAULT_KG_PER_CARTON),
+        "cartons_per_pallet": (
+            review.pallet.cartons_per_pallet if review and review.pallet
+            else packing_cfg.get("cartons_per_pallet", DEFAULT_CARTONS_PER_PALLET)
+        ),
+        "pallet_self_weight_kg": (
+            review.pallet.self_weight_kg if review and review.pallet
+            else packing_cfg.get("pallet_self_weight_kg", DEFAULT_PALLET_SELF_WEIGHT_KG)
+        ),
+        "measurement_per_pallet_m3": packing_cfg.get(
+            "measurement_per_pallet_m3", DEFAULT_MEASUREMENT_PER_PALLET_M3),
+    }
+
+
+def compute_packing_summary(items, config, review=None, allow_missing_weight=False):
+    """单一装箱计算入口（B-1）：缺重量检查 + 参数解析 + _compute_packing。
+
+    PL writer 的 write() 与 pipeline 的“出单前预算”都调它 —— 两者用同一个函数、
+    同一套参数算同一批数据，CI/PL 的数字才能同源。
+
+    缺重量时抛 PackingInfoMissingError（与 PL 原行为一致），上层负责生成 review.json。
+
+    Returns:
+        (packing_lines, summary) —— summary 含 total_net_weight / total_gross_weight /
+        total_pallets / total_cartons / total_measurement_m3
+    """
+    if not allow_missing_weight:
+        missing = _check_weight_completeness(items)
+        if missing:
+            raise PackingInfoMissingError(missing)
+    params = resolve_packing_params(config, review)
+    return _compute_packing(items, **params)
+
+
+def apply_packing_summary_to_derived(model, summary):
+    """把装箱 summary 写回 model.derived（B-1：让 PI/CI/PL 读同一份）。
+
+    只写这五个装箱字段，不碰 total_qty / has_weight / port_of_*（那些由 assemble 填）。
+    """
+    d = model.derived
+    d.total_cartons = summary["total_cartons"]
+    d.pallet_count = summary["total_pallets"]
+    d.total_net_weight = summary["total_net_weight"]
+    d.total_gross_weight = summary["total_gross_weight"]
+    d.total_measurement_m3 = summary["total_measurement_m3"]
+
+
 class PLWriterLite(BaseWriter):
     """Simplified PL Writer for public demo.
 
@@ -165,35 +220,14 @@ class PLWriterLite(BaseWriter):
         items = model.items
 
         # ── Safety net: detect missing weight info before generating empty PL ──
-        # Skipped if caller explicitly accepts zero-weight output (e.g. demo with all zeros).
-        if not kwargs.get("allow_missing_weight", False):
-            missing = _check_weight_completeness(items)
-            if missing:
-                raise PackingInfoMissingError(missing)
-
-        # ── Packing review override (v1.1.0) ──
-        # 如果上层传入 PackingReview（已 apply 到 model），用它的 pallet 配置覆盖
+        # ── 装箱计算：走单一入口 compute_packing_summary（B-1）──
+        # safety net（缺重量抛 PackingInfoMissingError）+ 参数解析 + _compute_packing
+        # 全部封装在内；PL 与 pipeline 的出单前预算调的是同一个函数，
+        # 因此两者用的是同一套参数、算的同一批数据，CI/PL 数字必然一致。
         review = kwargs.get("packing_review")
-
-        packing_cfg = (self.config or {}).get("packing", {})
-        # 优先级：review.pallet > config.packing > module defaults
-        eff_kg_per_carton = packing_cfg.get("carton_weight_kg", DEFAULT_KG_PER_CARTON)
-        eff_cartons_per_pallet = (
-            review.pallet.cartons_per_pallet if review and review.pallet
-            else packing_cfg.get("cartons_per_pallet", DEFAULT_CARTONS_PER_PALLET)
-        )
-        eff_pallet_self_weight = (
-            review.pallet.self_weight_kg if review and review.pallet
-            else packing_cfg.get("pallet_self_weight_kg", DEFAULT_PALLET_SELF_WEIGHT_KG)
-        )
-        packing_lines, summary = _compute_packing(
-            items,
-            kg_per_carton=eff_kg_per_carton,
-            cartons_per_pallet=eff_cartons_per_pallet,
-            pallet_self_weight_kg=eff_pallet_self_weight,
-            measurement_per_pallet_m3=packing_cfg.get(
-                "measurement_per_pallet_m3", DEFAULT_MEASUREMENT_PER_PALLET_M3
-            ),
+        packing_lines, summary = compute_packing_summary(
+            items, self.config, review=review,
+            allow_missing_weight=kwargs.get("allow_missing_weight", False),
         )
 
         wb = Workbook()
@@ -311,12 +345,8 @@ class PLWriterLite(BaseWriter):
 
         wb.save(output_path)
 
-        # Write back to model
-        model.derived.total_cartons = summary["total_cartons"]
-        model.derived.pallet_count = summary["total_pallets"]
-        model.derived.total_net_weight = summary["total_net_weight"]
-        model.derived.total_gross_weight = summary["total_gross_weight"]
-        model.derived.total_measurement_m3 = summary["total_measurement_m3"]
+        # Write back to model（单一入口，与出单前预算同源）
+        apply_packing_summary_to_derived(model, summary)
 
         return {
             "success": True,

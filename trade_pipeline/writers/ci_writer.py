@@ -361,7 +361,14 @@ class CIWriter(BaseWriter):
         # CI 独立累加会与 PL 有 ≤几分钱的分叉,读回写值保证两单严格一致。
         # 用 is not None 判断(0.0 是合法净重),PL 未运行时回退独立累加。
         nw = model.derived.total_net_weight
-        if nw is None:
+        # 标记这两个数是否来自“出单前预算”（权威值）。若为 False，说明预算没跑
+        # （通常因为重量信息不全、预算被跳过），这里是本地兜底算出来的：
+        # 净重走 effective_weight_kg 逐行累加（口径正当），
+        # 毛重用 nw * 1.036 —— 那是个经验系数，不是真实称重/托盘自重算出来的。
+        # 暴露给上层，由 pipeline 决定要不要提示用户（不改行为，只让它可见）。
+        net_from_budget = nw is not None
+        gross_from_budget = model.derived.total_gross_weight is not None
+        if not net_from_budget:
             nw = sum(effective_weight_kg(i) or 0 for i in items)
         gw = model.derived.total_gross_weight or round(nw * 1.036, 2)
         _sc(ws, R, 1, value=f"N.W.:{nw:,.2f}KGS  G.W.:{gw:,.2f}KGS", font=_fnt(12))
@@ -376,5 +383,8 @@ class CIWriter(BaseWriter):
             "total_net_weight": round(nw, 2),
             # T1: 暴露 CI 页脚的毛重（读 derived 真值或走兜底），供跨单校验比对
             "total_gross_weight": round(gw, 2),
+            # 供上层判断“这两个数是不是权威值”：False = 本地兜底，毛重含 1.036 估算
+            "net_from_budget": net_from_budget,
+            "gross_from_budget": gross_from_budget,
             "output_path": output_path,
         }

@@ -251,12 +251,37 @@ def _write_trade_docs(model, config: dict, output_dir: str, order_no: str,
     v1.1.0: 接受可选 packing_review（PackingReview 对象）传给 PLWriter。
     PackingInfoMissingError 时自动生成 review.json，供用户填写 + --confirm-packing 重跑。
 
-    T1 修复：PL 必须在 CI 之前生成。PLWriterLite 是唯一按托盘数算真实毛重并
-    回写 model.derived.total_gross_weight 的环节；CI 页脚 G.W. 读该真值（PL 缺失
-    时才走 nw*1.036 兜底）。此前 CI 先于 PL → derived 恒为 None → CI 永远走兜底，
-    与 PL 的真值系统性不一致。故生成顺序调整为 PI → PL → CI。
+    T1 修复：PL 在 CI 之前生成。PLWriterLite 按托盘数算真实毛重并回写
+    model.derived.total_gross_weight；CI 页脚 G.W. 优先读该真值。此前
+    CI 先于 PL → derived 恒为 None → CI 永远走兜底估算，与 PL 的真值不一致。
+
+    B-1（v1.5.1）：真正解决问题的地方是下面的**出单前预算** —— 它在本函数一开始
+    就把装箱算好写进 derived，CI/PL 之后都读同一份。因此 PL/CI 的先后顺序
+    本身已不再影响数字（T1 的顺序保留下来，属额外的保险）。
     """
-    results = {"outputs": {}, "warnings": []}
+    results = {"outputs": {}, "warnings": [], "errors": []}
+
+    # ── B-1：出单前预算装箱，写回 derived，让 PI/CI/PL 读同一份 ──
+    # 只在重量齐全时预算（缺重量维持原 PL review 流程：补录后重跑时重量齐全，自然一致）。
+    # 用与 PL 同一函数 compute_packing_summary → CI 不再需要 nw*1.036 估算。
+    #
+    # 重量齐全却预算失败 = 非预期（数据异常 / 代码 bug）→ fail-loud：记 error + 不生成
+    # 正式单据，绝不用可能错的数字继续出单。单据数字错了在清关与收汇上都是实际问题。
+    from trade_pipeline.writers.pl_writer_lite import (
+        apply_packing_summary_to_derived,
+        compute_packing_summary,
+    )
+    from trade_pipeline.writers.pl_writer_lite import _check_weight_completeness
+    if not _check_weight_completeness(model.items):
+        try:
+            _, _summary = compute_packing_summary(
+                model.items, config, review=packing_review)
+            apply_packing_summary_to_derived(model, _summary)
+        except Exception as e:
+            msg = f"出单前装箱预算失败（重量齐全却算崩）: {type(e).__name__}: {e}"
+            print(f"  ✗ {msg}")
+            results["errors"].append(msg)
+            return results  # 不继续 PI/PL/CI
 
     print(f"[6/{total_steps}] 生成 PI 形式发票")
     pi_path = str(Path(output_dir) / f"{order_no}_pi.xlsx")
@@ -329,6 +354,16 @@ def _write_trade_docs(model, config: dict, output_dir: str, order_no: str,
         results["outputs"]["ci_xlsx"] = ci_path
         print(f"      → {ci_path}")
         print(f"      CI No.: {ci_info['ci_number']} | 金额: {model.order.currency} {ci_info['total_amount']:,.2f}")
+        # 选项 A：毛重非权威值时必须让用户知道，不能默默用估算数（1.036 是经验系数，
+        # 不是真实称重/托盘自重算出来的）。不改行为，只让它可见。
+        if ci_info.get("gross_from_budget") is False:
+            msg = (
+                "CI 毛重为估算值：本次未拿到装箱预算数据（通常是重量信息不全），"
+                f"页脚 G.W. 按 净重×1.036 估算（{ci_info['total_gross_weight']:,.2f}kg）。"
+                "补齐装箱信息并重跑后，CI 会改用与 PL 同源的真值。"
+            )
+            results["warnings"].append(msg)
+            print(f"      ⚠ {msg}")
     except Exception as e:
         msg = f"CI 生成失败: {type(e).__name__}: {e}"
         results["warnings"].append(msg)
@@ -681,6 +716,26 @@ def run_price_update(
             )
             return result
 
+    # ── B-1：出单前预算装箱写回 derived（与 run() 路径同一逻辑，让 CI/PL 数字同源）──
+    # 与 run() 保持同一道闸：只在重量齐全时预算；重量齐全却算崩 = 非预期 → fail-loud，
+    # 记 error 并直接返回，不出可能带错数字的单据。两大路径必须都接 —— 少接一处，
+    # 那条路径上的 CI/PL 就又会各自算一遍。
+    from trade_pipeline.writers.pl_writer_lite import (
+        apply_packing_summary_to_derived,
+        compute_packing_summary,
+    )
+    from trade_pipeline.writers.pl_writer_lite import _check_weight_completeness
+    if not _check_weight_completeness(model.items):
+        try:
+            _, _summary = compute_packing_summary(
+                model.items, config, review=packing_review_obj)
+            apply_packing_summary_to_derived(model, _summary)
+        except Exception as e:
+            msg = f"出单前装箱预算失败（重量齐全却算崩）: {type(e).__name__}: {e}"
+            print(f"  ✗ {msg}")
+            result.setdefault("errors", []).append(msg)
+            return result  # 不继续 PI/PL/CI
+
     # PI
     pi_path = str(Path(output_dir) / f"{model.order.order_no}_pi.xlsx")
     try:
@@ -742,6 +797,15 @@ def run_price_update(
         print(f"  → CI 已重新生成: {ci_path}")
         print(f"     CI No.: {ci_info['ci_number']} | 金额: {model.order.currency} {ci_info['total_amount']:,.2f}")
         result["ci_path"] = ci_path
+        # 选项 A：毛重为估算值时明确提示（与 run() 路径同一文案口径）
+        if ci_info.get("gross_from_budget") is False:
+            msg = (
+                "CI 毛重为估算值：本次未拿到装箱预算数据（通常是重量信息不全），"
+                f"页脚 G.W. 按 净重×1.036 估算（{ci_info['total_gross_weight']:,.2f}kg）。"
+                "补齐装箱信息并重跑后，CI 会改用与 PL 同源的真值。"
+            )
+            result.setdefault("warnings", []).append(msg)
+            print(f"     ⚠ {msg}")
     except Exception as e:
         print(f"  ⚠ CI 重新生成失败: {type(e).__name__}: {e}")
         result.setdefault("warnings", []).append(f"CI: {e}")

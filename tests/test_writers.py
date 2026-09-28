@@ -292,8 +292,13 @@ def _read_ci_gross_weight(path: str) -> float:
 
 
 def test_ci_gross_weight_equals_pl_when_pl_runs_first():
-    """T1: PL 先跑回写 derived.total_gross_weight → CI 读真值，两者 G.W. 相等，
-    且 CI 不再走 nw*1.036 兜底。"""
+    """T1: PL 先跑回写 derived.total_gross_weight → CI 读真值，两者 G.W. 相等。
+
+    ⚠ B-1（v1.6.0）之后本测试测的是 **writer 层**的行为：这里直接调 writer、
+    绕过了 pipeline，而生产流程现在会先跑“出单前预算”把 derived 填好，
+    PL/CI 的先后已不再影响数字（见 tests/test_packing_prebudget.py）。
+    保留本测试是为了锁住 writer 自身的回写/读取契约。
+    """
     model = make_resolved_model(with_prices=True, with_weights=True)
     with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f1:
         pl_path = f1.name
@@ -319,7 +324,13 @@ def test_ci_gross_weight_equals_pl_when_pl_runs_first():
 
 
 def test_ci_gross_weight_falls_back_when_pl_not_run():
-    """回归：PL 未跑（derived 无毛重）时 CI 仍走 nw*1.036 兜底，不崩。"""
+    """回归：derived 无毛重时 CI 仍走 nw*1.036 兜底，不崩。
+
+    ⚠ B-1（v1.6.0）后这条兜底在生产流程里已基本不可达（预算会先把 derived 填好）；
+    它仍然存在是为了：① writer 被单独调用时不崩；② 重量不全、预算被跳过时
+    还能出一个带值的 CI。后一种情形下 CI 会标记 gross_from_budget=False，
+    由 pipeline 向用户提示“毛重是估算值”（见 test_packing_prebudget.py）。
+    """
     model = make_resolved_model(with_prices=True, with_weights=True)
     model.derived.total_gross_weight = None
     with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as f:

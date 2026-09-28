@@ -5,6 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-09-28
+
+装箱改为**出单前预算**：PI / CI / PL 从同一份预算取数，不再依赖「PL 必须先于 CI 生成」这个隐含顺序。
+
+### ⚠️ 行为变化（升级前读）
+
+重量齐全但装箱参数非法（如 `packing.cartons_per_pallet` 设为 0）时，以前会：
+PL 报一条警告、**CI 仍然生成**（毛重走估算），单据照样落盘。
+
+现在会：**记 error 并拦住全部正式单据**（PI / PL / CI 都不生成）。理由是这种情况下
+一定是数据异常或代码 bug，而出一套数字可能错的单据比不出要糟——毛重错了在清关
+与收汇上都是实际问题。报价单不受影响，报错会指明具体原因。
+
+### Changed
+
+- **装箱计算改为单一入口**（`writers/pl_writer_lite.py`）：新增
+  `resolve_packing_params()`（review.pallet > config.packing > 默认值）、
+  `compute_packing_summary()`（缺重量检查 + 参数解析 + 计算）、
+  `apply_packing_summary_to_derived()`。PL writer 不再自己解析一遍参数，
+  而是与预算调同一个函数 —— 两处各自解析参数正是过去 CI/PL 数字分叉的根因之一。
+- **两条路径都接入出单前预算**（`pipeline/main.py` 的 `_write_trade_docs()` 与
+  `run_price_update()`）：在生成任何单据之前先把装箱算好写回 `derived`，
+  PI / CI / PL 之后都读同一份。金额与重量两大口径的分叉因此从根上消除。
+
+  > 为什么两条路径都要接：少接一处，那条路径上的 CI/PL 就又各自算一遍，
+  > 回到分叉状态。
+
+### Added
+
+- **CI 毛重为估算值时明确提示**：当预算被跳过（通常是重量信息不全）而 CI 仍
+  生成时，`ci_writer` 会标记 `gross_from_budget=False`，由 pipeline 向用户
+  发出警告，说明页脚 G.W. 是按 `净重×1.036` 估算的（那是经验系数，不是真实
+  称重/托盘自重算出来的）。**行为未变，但不再默默用一个估算数。**
+- **`tests/test_packing_prebudget.py`（11 个用例）**：参数优先级、预算与 PL
+  writer 同源、回写不覆盖 `total_qty` / `port_*`、**顺序无关性**（PL 完全不跑
+  时 CI 仍拿到真值）、fail-loud 拦住全部正式单据、重量不全时预算跳过、
+  估算值被标记。
+
+### 说明（为什么不删那条 1.036 兜底）
+
+B-1 之后该兜底在生产流程里已基本不可达，但保留它有两个理由：writer 被单独
+调用时不崩；重量不全、预算被跳过时仍能出一个带值的 CI。它的存在现在
+transparent 了——会带标记、会被提示。
+
 ## [1.5.0] - 2026-09-26
 
 新增三条出单前门禁（R011–R013）：正式单据不得带缺失的买方抬头、贸易条款或收款银行信息签发。
