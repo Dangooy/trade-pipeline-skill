@@ -16,6 +16,7 @@ severity 取值约定：
 """
 from trade_pipeline.models.amounts import PricingMode, compute_amount
 from trade_pipeline.models.order_model import OrderItem, OrderModel
+from trade_pipeline.config_service import validate_seller
 from trade_pipeline.validation.models import CheckResult, Severity
 
 
@@ -71,6 +72,91 @@ def check_trade_terms(model: OrderModel) -> list[CheckResult]:
             suggestion="在 config.yaml 的 terms_templates 中选择一个条款模板（如 default_usd）。",
         )]
     return []
+
+
+def check_resolved_buyer(model: OrderModel) -> list[CheckResult]:
+    """R011 买方解析结果缺失：正式单据不能带空买方抬头签发。"""
+    if model.resolved is None:
+        return []
+
+    buyer = model.resolved.buyer or {}
+    if buyer and not _is_blank(buyer.get("name_en")):
+        return []
+
+    buyer_id = model.refs.buyer_id or "当前买方"
+    return [CheckResult(
+        rule_id="R011",
+        severity=Severity.ERROR,
+        message=f"买方资料未解析完整：{buyer_id} 缺少有效英文名称。",
+        field="resolved.buyer.name_en",
+        suggestion=(
+            f"到配置中心补全客户 {buyer_id} 的英文名称，"
+            "或检查 buyers 配置键是否仍存在。"
+        ),
+    )]
+
+
+def check_resolved_terms(model: OrderModel) -> list[CheckResult]:
+    """R012 条款解析结果缺失：正式单据不能带空付款/交货条款签发。"""
+    if model.resolved is None:
+        return []
+
+    if model.resolved.terms:
+        return []
+
+    terms_id = model.refs.terms_id or "当前条款"
+    return [CheckResult(
+        rule_id="R012",
+        severity=Severity.ERROR,
+        message=f"贸易条款未解析：{terms_id} 在条款模板中不存在或为空。",
+        field="resolved.terms",
+        suggestion=(
+            f"到配置中心补全 terms_templates.{terms_id}，"
+            "或为当前格式选择有效 terms_id。"
+        ),
+    )]
+
+
+def check_resolved_bank(model: OrderModel) -> list[CheckResult]:
+    """R013 银行解析结果缺失：正式 PI/CI 必须有完整收款信息。"""
+    if model.resolved is None:
+        return []
+
+    bank = model.resolved.bank or {}
+    required_fields = {
+        "name": "银行名称",
+        "account_no": "账号",
+        "swift": "SWIFT",
+    }
+    missing = [
+        label for key, label in required_fields.items()
+        if _is_blank(bank.get(key))
+    ]
+    seller_id = model.refs.seller_id or "当前出单公司"
+
+    if missing:
+        return [CheckResult(
+            rule_id="R013",
+            severity=Severity.ERROR,
+            message=f"收款银行信息不完整：缺少{'、'.join(missing)}。",
+            field="resolved.bank",
+            suggestion=f"到配置中心补全出单公司 {seller_id} 的银行名称、账号和 SWIFT。",
+        )]
+
+    swift_errors = [
+        error for error in validate_seller({"name_en": "VALIDATION", "bank": bank})
+        if "SWIFT" in error
+    ]
+    if not swift_errors:
+        return []
+
+    return [CheckResult(
+        rule_id="R013",
+        severity=Severity.ERROR,
+        message=f"收款银行 SWIFT 格式错误：{swift_errors[0]}。",
+        field="resolved.bank.swift",
+        suggestion=f"到配置中心修正出单公司 {seller_id} 的 SWIFT，应为 8 或 11 位。",
+    )]
 
 
 def check_destination_port(model: OrderModel) -> list[CheckResult]:
@@ -217,6 +303,9 @@ ALL_RULES = [
     check_seller_identity,    # R001
     check_buyer_identity,     # R002
     check_trade_terms,        # R003
+    check_resolved_buyer,     # R011
+    check_resolved_terms,     # R012
+    check_resolved_bank,      # R013
     check_destination_port,   # R004
     check_unit_prices,        # R005
     check_quantities,         # R006

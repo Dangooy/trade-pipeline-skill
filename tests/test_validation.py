@@ -60,6 +60,59 @@ def test_missing_terms_reports_error():
     assert "R003" in rule_ids(report.errors)
 
 
+# ── R011–R013：出单前的最后一道门禁（不能带缺失的买方/条款/收款信息签发正式单据）──
+
+
+def test_unresolved_model_does_not_require_resolved_entities():
+    """未走 resolve_entities 的模型不应被 R011–R013 误拦。
+
+    这三条规则看的是 `model.resolved`；未解析时它为 None，规则必须直接放行，
+    否则报价单阶段（尚未解析实体）会被正式单据的门禁卡住。
+    """
+    model = make_model(with_prices=True, with_weights=True)
+    model.derived.port_of_destination = "CHICAGO, USA"
+    report = validate_order(model)
+    assert {"R011", "R012", "R013"}.isdisjoint(rule_ids(report.errors))
+
+
+def test_resolved_buyer_missing_name_reports_error():
+    """R011：正式单据不能带空买方抬头。"""
+    model = make_resolved_model(with_prices=True)
+    model.resolved.buyer = {}
+    report = validate_order(model)
+    assert "R011" in rule_ids(report.errors)
+
+
+def test_resolved_terms_missing_reports_error():
+    """R012：正式单据不能缺付款/交货条款。"""
+    model = make_resolved_model(with_prices=True)
+    model.resolved.terms = {}
+    report = validate_order(model)
+    assert "R012" in rule_ids(report.errors)
+
+
+def test_resolved_bank_missing_swift_reports_error():
+    """R013：PI/CI 必须有完整收款信息。"""
+    model = make_resolved_model(with_prices=True)
+    model.resolved.bank = dict(model.resolved.bank)
+    model.resolved.bank["swift"] = ""
+    report = validate_order(model)
+    errors = {r.rule_id: r for r in report.errors}
+    assert "R013" in errors
+    assert "SWIFT" in errors["R013"].message
+
+
+def test_resolved_bank_invalid_swift_reports_error():
+    """R013：SWIFT 格式错也要拦（不只是缺）。"""
+    model = make_resolved_model(with_prices=True)
+    model.resolved.bank = dict(model.resolved.bank)
+    model.resolved.bank["swift"] = "BAD"
+    report = validate_order(model)
+    errors = {r.rule_id: r for r in report.errors}
+    assert "R013" in errors
+    assert "8 或 11" in errors["R013"].message
+
+
 def test_missing_destination_port_is_warning_not_error():
     model = make_model(with_prices=True)
     assert model.derived.port_of_destination is None

@@ -20,6 +20,7 @@ import os
 import tempfile
 
 import pytest
+import yaml
 
 from tests.conftest import make_model
 from trade_pipeline.pipeline.main import load_config, run, run_price_update
@@ -48,6 +49,21 @@ def _setup_priced_order(tmp_dir: str, *, with_prices: bool, clean_port: bool):
 
 def _files(tmp_dir: str) -> list[str]:
     return [f for f in os.listdir(tmp_dir) if not f.startswith(".")]
+
+
+def _load_config_file(path):
+    with open(path, encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
+
+def _write_config_file(path, config):
+    with open(path, "w", encoding="utf-8") as f:
+        yaml.safe_dump(config, f, allow_unicode=True)
+
+
+def _report_rule_ids(result) -> set[str]:
+    report = result.get("precheck_report") or {}
+    return {item["rule_id"] for item in report.get("errors", [])}
 
 
 # ── 有 error 时阻断生成 ──────────────────────────────────────────
@@ -116,6 +132,125 @@ def test_price_update_clean_order_generates_docs():
         files = _files(tmp)
         assert any("_pi" in f for f in files)
         assert any("_ci" in f for f in files)
+
+
+# ── B-2：buyer / terms / bank 强校验（R011–R013）────────────────
+#
+# 这三条规则拦的是“正式单据带缺失信息签发”：客户配置被删、条款模板被删、
+# 银行 SWIFT 被清空——这些都不会报错，只会默默印出一份抬头/条款/收款信息有问
+# 题的单据。下面用 CLI 层验证：不仅规则本身报错，而且确实**拦住了落盘**。
+
+
+def test_b2_price_update_missing_buyer_blocks(inject_test_config):
+    """报价后客户配置被删除 → price-update 应由 R011 阻断正式单据。"""
+    with tempfile.TemporaryDirectory() as tmp:
+        quote_path, model_path = _setup_priced_order(
+            tmp, with_prices=True, clean_port=True)
+
+        config = _load_config_file(inject_test_config)
+        del config["buyers"]["global_fasteners"]
+        _write_config_file(inject_test_config, config)
+
+        result = run_price_update(quote_path, model_path)
+
+        assert "R011" in _report_rule_ids(result)
+        assert result.get("errors")
+        assert not any("_pi" in f for f in _files(tmp))
+        assert not any("_ci" in f for f in _files(tmp))
+
+
+def test_b2_price_update_missing_terms_blocks(inject_test_config):
+    """条款模板被删除 → price-update 应由 R012 阻断正式单据。"""
+    with tempfile.TemporaryDirectory() as tmp:
+        quote_path, model_path = _setup_priced_order(
+            tmp, with_prices=True, clean_port=True)
+
+        config = _load_config_file(inject_test_config)
+        del config["terms_templates"]["default_usd"]
+        _write_config_file(inject_test_config, config)
+
+        result = run_price_update(quote_path, model_path)
+
+        assert "R012" in _report_rule_ids(result)
+        assert result.get("errors")
+        assert not any("_pi" in f for f in _files(tmp))
+        assert not any("_ci" in f for f in _files(tmp))
+
+
+def test_b2_price_update_missing_bank_swift_blocks(inject_test_config):
+    """银行 SWIFT 被清空 → price-update 应由 R013 阻断正式单据。"""
+    with tempfile.TemporaryDirectory() as tmp:
+        quote_path, model_path = _setup_priced_order(
+            tmp, with_prices=True, clean_port=True)
+
+        config = _load_config_file(inject_test_config)
+        config["sellers"]["acme_export"]["bank"]["swift"] = ""
+        _write_config_file(inject_test_config, config)
+
+        result = run_price_update(quote_path, model_path)
+
+        assert "R013" in _report_rule_ids(result)
+        assert result.get("errors")
+        assert not any("_pi" in f for f in _files(tmp))
+        assert not any("_ci" in f for f in _files(tmp))
+
+
+def test_b2_run_missing_formal_doc_config_generates_quote_only_partial(inject_test_config):
+    """run() 非 quote-only 路径遇 B-2 规则时应部分成功：
+    报价单落盘，PI/CI 因 R011 error 被阻断不落盘。
+
+    锁住“报价主路径先 resolve_entities 再 precheck”的隐含契约：
+    若未来有人把 precheck 挪到 resolve 之前，R011 会静默漏放，本测试即失败。
+    """
+    config = _load_config_file(inject_test_config)
+    config["buyers"]["global_fasteners"]["name_en"] = ""
+    _write_config_file(inject_test_config, config)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        result = run(
+            input_path="examples/sample_inquiry.xlsx",
+            order_no="B2RUN",
+            buyer_id="global_fasteners",
+            output_dir=tmp,
+            quote_only=False,
+        )
+
+        files = _files(tmp)
+        assert result["success"] is False
+        assert any("R011" in e for e in result["errors"]), (
+            f"errors 应含 R011 阻断，实际：{result['errors']}"
+        )
+        assert any("quotation" in f for f in files), "报价单应照常生成"
+        assert not any("_pi" in f for f in files), "R011 阻断后不应生成 PI"
+        assert not any("_ci" in f for f in files), "R011 阻断后不应生成 CI"
+
+
+def test_b2_quote_only_allows_incomplete_formal_doc_config(inject_test_config):
+    """同一类配置问题不阻断 quote-only：报价单仍可先给内部填价。
+
+    这是刻意的边界：报价阶段（还未走到正式单据）不应该被正式单据的
+    门禁卡住，否则用户连报价都出不了。
+    """
+    config = _load_config_file(inject_test_config)
+    config["buyers"]["global_fasteners"]["name_en"] = ""
+    del config["terms_templates"]["default_usd"]
+    config["sellers"]["acme_export"]["bank"]["swift"] = ""
+    _write_config_file(inject_test_config, config)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        result = run(
+            input_path="examples/sample_inquiry.xlsx",
+            order_no="B2QUOTE",
+            buyer_id="global_fasteners",
+            output_dir=tmp,
+            quote_only=True,
+        )
+
+        files = _files(tmp)
+        assert result["success"] is True
+        assert any("quotation" in f for f in files)
+        assert not any("_pi" in f for f in files)
+        assert not any("_ci" in f for f in files)
 
 
 # ── --no-precheck 保持旧流程 ────────────────────────────────────
