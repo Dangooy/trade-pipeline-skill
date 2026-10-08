@@ -1,8 +1,8 @@
 # Trade Pipeline — 技术深度版
 
-> 这是技术深度版，给开发者和技术评估者看。业务向介绍见 [中文 README](README.md) · [English](README_EN.md) · [Русский](README_RU.md)
+> 这是技术深度版，给开发者和技术评估者看。业务向介绍见 [中文 README](README_CN.md) · [English](README.md) · [Русский](README_RU.md)
 
-[中文](README.md) | [English](README_EN.md) | [Русский](README_RU.md)
+[中文](README_CN.md) | [English](README.md) | [Русский](README_RU.md)
 
 ---
 
