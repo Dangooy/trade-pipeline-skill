@@ -375,6 +375,14 @@ This means:
 - ✅ You can track every change with Git
 - ⚠️ You're responsible for your own backups (recommend periodically copying to an external drive or encrypted cloud storage)
 
+> ⚠️ **One exception — optional LLM parsing (`--use-llm`)**: the default parser runs **entirely locally, with no network calls**. Only when you explicitly enable `--use-llm` does the tool send the raw inquiry contents (including customer names, products, and quantities) to the Anthropic cloud API to help parse unusual formats. This switch is **off by default and requires an explicit opt-in** — for sensitive or confidential documents, stay on the default local mode.
+
+---
+
+## About the author
+
+Built by Yang Tian (Ethan Yang) — factory-side trade practitioner, not a professional programmer. More trade AI skills: [tianji-skills](https://github.com/Dangooy/tianji-skills) (B2B lead research, RFQ intake, document verification). Public profile: [@Dangooy](https://github.com/Dangooy).
+
 ---
 
 ## License
