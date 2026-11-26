@@ -1,10 +1,20 @@
 # Trade Pipeline
 
+[![CI status](https://github.com/Dangooy/trade-pipeline-skill/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Dangooy/trade-pipeline-skill/actions/workflows/ci.yml)
+[![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue.svg)](README_DEV.md#运行测试)
+[![Latest release](https://img.shields.io/github/v/release/Dangooy/trade-pipeline-skill)](https://github.com/Dangooy/trade-pipeline-skill/releases/latest)
+
+[![Codex](https://img.shields.io/badge/Codex-3B67C8.svg)](#repository-skills)
+[![Google Antigravity](https://img.shields.io/badge/Google%20Antigravity-326CBB.svg)](#repository-skills)
+[![Claude Code](https://img.shields.io/badge/Claude%20Code-8A5BB5.svg)](#repository-skills)
+[![WorkBuddy](https://img.shields.io/badge/WorkBuddy-137B72.svg)](#workbuddy)
+
 **Один набор данных заказа для подготовки нужных внешнеторговых документов.**
 
 Trade Pipeline — открытый ИИ-навык и инструмент подготовки документов, созданный на основе повседневной работы в производственном экспорте. Он помогает разобрать запрос на цену в Excel, подготовить коммерческое предложение, проверить данные заказа и сформировать счёт-проформу (PI), коммерческий инвойс (CI) и упаковочный лист (PL).
 
-[中文](README_CN.md) | [English](README.md) | **Русский** | [Техническая документация на китайском](README_DEV.md)
+[中文](README.md) | [English](README_EN.md) | **Русский** | [Техническая документация на китайском](README_DEV.md)
 
 [Быстрый старт](#быстрый-старт) · [Примеры документов](#примеры-документов) · [Выпуски](https://github.com/Dangooy/trade-pipeline-skill/releases)
 
@@ -48,6 +58,8 @@ Trade Pipeline хранит общие сведения в структурир�
 
 ## Быстрый старт
 
+<a name="repository-skills"></a>
+
 ### Codex, Google Antigravity и Claude Code
 
 В репозитории есть два навыка. `trade-pipeline-init` настраивает сведения о компании и клиентах, а `trade-pipeline-run` готовит документы и переносит цены. Для этих навыков используется движок из репозитория со своей процедурой настройки.
@@ -71,6 +83,8 @@ python -m pip install -e .
 | Claude Code | Откройте клонированный репозиторий и используйте существующий каталог `.claude/skills/` |
 
 Для запуска из командной строки используйте `python -m trade_pipeline --help`. Пример команды, настройки и запуск тестов описаны в [технической документации](README_DEV.md).
+
+<a name="workbuddy"></a>
 
 ### WorkBuddy
 

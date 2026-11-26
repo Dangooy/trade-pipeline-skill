@@ -1,8 +1,8 @@
 # Trade Pipeline — 技术深度版
 
-> 这是技术深度版，给开发者和技术评估者看。业务向介绍见 [中文 README](README_CN.md) · [English](README.md) · [Русский](README_RU.md)
+> 这是技术深度版，给开发者和技术评估者看。业务向介绍见 [中文 README](README.md) · [English](README_EN.md) · [Русский](README_RU.md)
 
-[中文](README_CN.md) | [English](README.md) | [Русский](README_RU.md)
+[中文](README.md) | [English](README_EN.md) | [Русский](README_RU.md)
 
 ---
 
@@ -54,7 +54,7 @@ graph TD
 
 报价单发给客户后，客户可能插入行、调整顺序、加分组标题。如果按行号回写价格，行号一变价格就全错位。
 
-报价表的商品行包含隐藏的 UUID。保留该标识后，调整行序仍可对应到原订单明细。背景见[中文 README 的开发故事](README_CN.md#这个工具是怎么做出来的)。
+报价表的商品行包含隐藏的 UUID。保留该标识后，调整行序仍可对应到原订单明细。背景见[中文 README 的开发故事](README.md#这个工具是怎么做出来的)。
 
 ### 3. 买家匹配失败 = 硬阻断，不猜测
 
