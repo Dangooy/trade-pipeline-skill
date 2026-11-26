@@ -13,7 +13,10 @@ from openpyxl.styles import Font, Alignment
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.page import PageMargins
 
-from .base_writer import BaseWriter, sc as _sc, mc as _mc, brd as _brd, rh as _rh
+from .base_writer import (
+    BaseWriter, sc as _sc, mc as _mc, brd as _brd, rh as _rh,
+    wrapped_row_height as _wrapped_height, set_print_layout as _set_print_layout,
+)
 from ..models.amounts import amount_formula, PricingMode
 from ..models.order_model import effective_weight_kg
 
@@ -31,7 +34,7 @@ def _aln(h="left", v=None, wrap=False):
 class PIWriter(BaseWriter):
     """PI 形式发票 Writer"""
 
-    def write(self, output_path: str, **kwargs) -> dict:
+    def write(self, output_path: str, *, quantity_unit=None, workbook_saver=None, **kwargs) -> dict:
         """
         生成 PI Excel。
 
@@ -50,12 +53,8 @@ class PIWriter(BaseWriter):
         for i, w in enumerate(col_widths, 1):
             ws.column_dimensions[get_column_letter(i)].width = w
 
-        # 页面设置
-        ws.page_setup.paperSize = ws.PAPERSIZE_A4
-        ws.page_setup.fitToPage = True
-        ws.page_setup.fitToWidth = 1
-        ws.page_setup.fitToHeight = 0
-        ws.page_margins = PageMargins(left=0.5, right=0.5, top=0.75, bottom=0.75)
+        # 打印版式（A4 竖版 / 一页宽 / 重复商品表头）在写完所有行后统一设置，
+        # 以便按实际内容确定打印区域和要重复的列头行，见文件末尾。
 
         today = model.order.date
         R = 1
@@ -110,8 +109,15 @@ class PIWriter(BaseWriter):
         _sc(ws, R, 1, value=f"Tel: {seller_tel}",
             font=_fnt(CALIBRI, 10), align=_aln("left"))
         _sc(ws, R, 14, value="PI No.", font=_fnt(CALIBRI, 10))
+        # 编号写在 O 列 = 打印范围最后一列：不换行时长编号会视觉溢出到
+        # 范围外的 P 列，纸面上被右边界截断。让它在 O 列内自动换行并按
+        # 内容抬高行高（复用共享 wrapped_row_height，不缩字号、不截值）。
+        # 编号所在行号随卖方信息行数浮动（模板在 O7，业务接口可能生成在
+        # O5），一律按写入时的实际行号 R 处理。
         _sc(ws, R, 15, value=model.order.pi_number,
-            font=_fnt(CALIBRI, 10, bold=True))
+            font=_fnt(CALIBRI, 10, bold=True), align=_aln("left", wrap=True))
+        _rh(ws, R, _wrapped_height(ws, model.order.pi_number, 15, 15,
+                                   font_size=10, min_pts=15))
         R += 1
 
         # Row 8: Contact
@@ -163,13 +169,18 @@ class PIWriter(BaseWriter):
             price_fmt = "#,##0.00"
             qty_fmt = "#,##0"
 
+        if quantity_unit:
+            qty_label = f"Qty ({quantity_unit})"
+            qty_fmt = "#,##0" if quantity_unit == "pcs" else "#,##0.00"
         from openpyxl.styles import PatternFill
         hdr_fill = PatternFill("solid", fgColor="1F3864")
         hdr_font = _fnt(CALIBRI, 10, bold=True, color="FFFFFF")
-        _sc(ws, R, 1, value="Name of Commodity and Specifications",
-            font=hdr_font, align=_aln("left", wrap=True))
-        ws.cell(R, 1).fill = hdr_fill
-        for ci in range(2, 12):
+        # 商品描述表头与数据行共用 A:K 这一片本来就空的占位列；L:O 是数量 /
+        # 重量 / 单价 / 金额，含有数据，绝不并进合并区。
+        HDR_ROW = R
+        _mc(ws, R, 1, R, 11, value="Name of Commodity and Specifications",
+            font=hdr_font, align=_aln("left", "center", wrap=True))
+        for ci in range(1, 12):
             ws.cell(R, ci).fill = hdr_fill
         _sc(ws, R, 12, value=qty_label, font=hdr_font, align=_aln("center"))
         ws.cell(R, 12).fill = hdr_fill
@@ -184,8 +195,10 @@ class PIWriter(BaseWriter):
         R += 1
 
         # 单位行
-        _sc(ws, R, 1, value=f"Order No.: {model.order.order_no}",
-            font=_fnt(CALIBRI, 11, bold=True))
+        order_line = f"Order No.: {model.order.order_no}"
+        _mc(ws, R, 1, R, 11, value=order_line,
+            font=_fnt(CALIBRI, 11, bold=True), align=_aln("left", "center", wrap=True))
+        ws.row_dimensions[R].height = _wrapped_height(ws, order_line, 1, 11, font_size=11)
         _sc(ws, R, 12, border=_brd(left="thin"))
         _sc(ws, R, 13, border=_brd(left="thin"))
         _sc(ws, R, 14, border=_brd(left="thin", right="thin"))
@@ -203,19 +216,21 @@ class PIWriter(BaseWriter):
             # 品类标题行
             group = item.group_key or item.standard or ""
             if group and group != prev_group:
-                _sc(ws, R, 1, value=group,
-                    font=_fnt(CALIBRI, 11, bold=True), align=_aln("left"))
+                _mc(ws, R, 1, R, 11, value=group,
+                    font=_fnt(CALIBRI, 11, bold=True),
+                    align=_aln("left", "center", wrap=True))
                 _sc(ws, R, 12, border=_brd(left="thin", right="thin"))
                 _sc(ws, R, 13, border=_brd(left="thin", right="thin"))
                 _sc(ws, R, 14, border=_brd(left="thin", right="thin"))
                 _sc(ws, R, 15, border=_brd(left="thin"))
-                _rh(ws, R, 14)
+                ws.row_dimensions[R].height = _wrapped_height(
+                    ws, group, 1, 11, font_size=11)
                 R += 1
                 prev_group = group
 
-            # 数据行
-            _sc(ws, R, 1, value=item.description,
-                font=_fnt(size=10), align=_aln("left"))
+            # 数据行：描述占满 A:K 可用列宽，自动换行且行高足够
+            _mc(ws, R, 1, R, 11, value=item.description,
+                font=_fnt(size=10), align=_aln("left", "top", wrap=True))
 
             _sc(ws, R, 12, value=item.quantity,
                 font=_fnt(CALIBRI, 11), align=_aln("right"),
@@ -251,7 +266,8 @@ class PIWriter(BaseWriter):
                 border=_brd(left="thin"),
                 num_fmt="#,##0.00")
 
-            _rh(ws, R, 13)
+            ws.row_dimensions[R].height = _wrapped_height(
+                ws, item.description, 1, 11, font_size=10, min_pts=15)
             R += 1
 
         DATA_END = R - 1
@@ -325,7 +341,15 @@ class PIWriter(BaseWriter):
             value="Authorized Signature: _______________________",
             font=_fnt(CALIBRI, 10), align=_aln("center", "bottom"))
 
-        wb.save(output_path)
+        _set_print_layout(
+            ws, 15, title_rows=f"{HDR_ROW}:{HDR_ROW}",
+            margins=PageMargins(left=0.5, right=0.5, top=0.75, bottom=0.75),
+        )
+
+        if workbook_saver is None:
+            wb.save(output_path)
+        else:
+            workbook_saver(wb, output_path)
 
         return {
             "items": len(items),

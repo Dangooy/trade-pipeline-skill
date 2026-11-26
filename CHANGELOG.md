@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.4]
+
+- WorkBuddy 1.6.4 取消了必须先跑初始化向导、填完 `config.yaml` 才能做单的前置步骤。
+- 公司、客户、贸易条款和银行资料优先取本单附件并记录来源。缺项先出内部工作稿，旧配置经本单确认后才采用，用户明确要求时才增量保存并保留备份。
+- WorkBuddy 可以直接核对资料，也可以按需生成形式发票、商业发票和装箱单。共用订单数据并保留字段来源，计价冲突可先留待确认，正式出单仍由本人确认。
+- 本次交付的 Excel 统一放在回复开头，待确认的内容集中列在后面。
+- 修复单据打印时商品说明和长编号的显示问题。README 并列提供 Codex、谷歌反重力（Google Antigravity）和 Claude Code 的仓库技能用法。
+- GitHub 继续提供开源源码、文档、仓库技能和版本记录。WorkBuddy 1.6.4 尚未上架，发布后可在技能市场搜索「外贸单证管线」安装。
+
 ## [1.6.0] - 2026-09-28
 
 装箱改为**出单前预算**：PI / CI / PL 从同一份预算取数，不再依赖「PL 必须先于 CI 生成」这个隐含顺序。

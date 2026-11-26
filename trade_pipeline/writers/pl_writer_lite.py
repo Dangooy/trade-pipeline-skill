@@ -15,7 +15,10 @@ from dataclasses import dataclass
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
 
-from .base_writer import BaseWriter, sc as _sc, mc as _mc, brd as _brd
+from .base_writer import (
+    BaseWriter, sc as _sc, mc as _mc, brd as _brd,
+    wrapped_row_height as _wrapped_height, set_print_layout as _set_print_layout,
+)
 
 CALIBRI = "Calibri"
 DEFAULT_KG_PER_CARTON = 25.0
@@ -215,7 +218,7 @@ class PLWriterLite(BaseWriter):
       - packing_review=PackingReview : 用 review.pallet 覆盖默认 pallet 配置
     """
 
-    def write(self, output_path: str, **kwargs) -> dict:
+    def write(self, output_path: str, *, actual_packing=None, workbook_saver=None, **kwargs) -> dict:
         model = self.model
         items = model.items
 
@@ -224,11 +227,13 @@ class PLWriterLite(BaseWriter):
         # safety net（缺重量抛 PackingInfoMissingError）+ 参数解析 + _compute_packing
         # 全部封装在内；PL 与 pipeline 的出单前预算调的是同一个函数，
         # 因此两者用的是同一套参数、算的同一批数据，CI/PL 数字必然一致。
-        review = kwargs.get("packing_review")
-        packing_lines, summary = compute_packing_summary(
-            items, self.config, review=review,
-            allow_missing_weight=kwargs.get("allow_missing_weight", False),
-        )
+        if actual_packing is None:
+            packing_lines, summary = compute_packing_summary(
+                items, self.config, review=kwargs.get("packing_review"),
+                allow_missing_weight=kwargs.get("allow_missing_weight", False),
+            )
+        else:
+            packing_lines, summary = actual_packing
 
         wb = Workbook()
         ws = wb.active
@@ -238,8 +243,9 @@ class PLWriterLite(BaseWriter):
         for letter, w in col_widths.items():
             ws.column_dimensions[letter].width = w
 
-        ws.page_setup.paperSize = 9
-        ws.page_setup.orientation = "landscape"
+        # 打印版式在所有行写完后统一设置（A4 竖版 / 一页宽 / 重复表头），
+        # 见文件末尾。Description 是独立的 B 列（C 列已有箱数数据），不能
+        # 靠合并扩宽，改为 B 列自动换行 + 足够行高。
 
         seller_name_cn = self.seller.get("name_cn", "")
         seller_name_en = self.seller.get("name_en", "")
@@ -266,8 +272,20 @@ class PLWriterLite(BaseWriter):
         R += 1
         _sc(ws, R, 1, value="TO:", font=_fnt(10))
         _sc(ws, R, 2, value=buyer_name, font=_fnt(10, bold=True))
-        _sc(ws, R, 6, value="PI No.:", font=_fnt(10))
-        _sc(ws, R, 7, value=model.order.pi_number, font=_fnt(10, bold=True))
+        reference = model.order.pi_number
+        label = "PI No.:"
+        if actual_packing is not None and not reference:
+            label, reference = "Order No.:", model.order.order_no
+        _sc(ws, R, 6, value=label, font=_fnt(10))
+        # G 列是 A4 竖版打印范围的最后一列：长 PI 号（或无 PI 时兼容路径的
+        # Order No.）不换行会向右溢出、尾部被打印右边界裁掉。让它在 G 列内
+        # 自动换行、行高按内容抬高（复用共享 wrapped_row_height，不缩字号、
+        # 不截值、不改原值与左对齐）；两种标签分支共用这一处处理。
+        # 行号按写入时的实际 R 处理（表头行号随卖方信息浮动）。
+        _sc(ws, R, 7, value=reference, font=_fnt(10, bold=True),
+            align=_aln("left", "center", wrap=True))
+        needed = _wrapped_height(ws, reference, 7, 7, font_size=10)
+        ws.row_dimensions[R].height = max(ws.row_dimensions[R].height or 0, needed)
         R += 1
 
         _sc(ws, R, 6, value="Date:", font=_fnt(10))
@@ -280,8 +298,12 @@ class PLWriterLite(BaseWriter):
         R += 1
 
         # Column headers
-        headers = ["No.", "Description", "Cartons", "KGS/CTN", "Qty (pcs)", "Net Weight", "Gross Weight"]
+        unit = "pcs" if actual_packing is None else items[0].unit
+        qty_fmt = "#,##0" if unit == "pcs" else "#,##0.00"
+        headers = ["No.", "Description", "Cartons", "KGS/CTN", f"Qty ({unit})",
+                   "Net Weight", "Gross Weight"]
         header_fill = PatternFill("solid", fgColor="1F3864")
+        HDR_ROW = R
         for i, h in enumerate(headers, 1):
             c = _sc(ws, R, i, value=h,
                     font=Font(name=CALIBRI, size=10, bold=True, color="FFFFFF"),
@@ -295,21 +317,27 @@ class PLWriterLite(BaseWriter):
 
         for idx, line in enumerate(packing_lines, 1):
             if line.group_key and line.group_key != prev_group:
-                _sc(ws, R, 2, value=line.group_key, font=_fnt(10, bold=True))
+                _sc(ws, R, 2, value=line.group_key, font=_fnt(10, bold=True),
+                    align=_aln("left", "top", wrap=True))
+                ws.row_dimensions[R].height = _wrapped_height(
+                    ws, line.group_key, 2, 2, font_size=10)
                 R += 1
                 prev_group = line.group_key
 
             _sc(ws, R, 1, value=idx, font=_fnt(10), align=_aln("center"), border=thin_bottom)
-            _sc(ws, R, 2, value=line.description, font=_fnt(10), border=thin_bottom)
+            _sc(ws, R, 2, value=line.description, font=_fnt(10),
+                align=_aln("left", "top", wrap=True), border=thin_bottom)
             _sc(ws, R, 3, value=line.cartons, font=_fnt(10), align=_aln("right"),
                 border=thin_bottom, num_fmt="#,##0")
             _sc(ws, R, 4, value=line.kg_per_carton, font=_fnt(10), align=_aln("right"),
                 border=thin_bottom, num_fmt="#,##0.00")
             _sc(ws, R, 5, value=line.pcs, font=_fnt(10), align=_aln("right"),
-                border=thin_bottom, num_fmt="#,##0")
+                border=thin_bottom, num_fmt=qty_fmt)
             _sc(ws, R, 6, value=line.net_weight_kg, font=_fnt(10), align=_aln("right"),
                 border=thin_bottom, num_fmt="#,##0.00")
             _sc(ws, R, 7, value="", font=_fnt(10), align=_aln("right"), border=thin_bottom)
+            ws.row_dimensions[R].height = _wrapped_height(
+                ws, line.description, 2, 2, font_size=10, min_pts=15)
             R += 1
 
         # Total row
@@ -320,7 +348,7 @@ class PLWriterLite(BaseWriter):
             align=_aln("right"), border=total_border, num_fmt="#,##0")
         _sc(ws, R, 4, value="", border=total_border)
         _sc(ws, R, 5, value=summary["total_pcs"], font=_fnt(11, bold=True),
-            align=_aln("right"), border=total_border, num_fmt="#,##0")
+            align=_aln("right"), border=total_border, num_fmt=qty_fmt)
         _sc(ws, R, 6, value=summary["total_net_weight"], font=_fnt(11, bold=True),
             align=_aln("right"), border=total_border, num_fmt="#,##0.00")
         _sc(ws, R, 7, value=summary["total_gross_weight"], font=_fnt(11, bold=True),
@@ -329,21 +357,30 @@ class PLWriterLite(BaseWriter):
 
         # Footer
         R += 1
-        _sc(ws, R, 1, value=f"PACKED IN {summary['total_pallets']} PALLETS ONLY.",
-            font=_fnt(10))
+        if summary["total_pallets"] is not None:
+            _sc(ws, R, 1, value=f"PACKED IN {summary['total_pallets']} PALLETS ONLY.",
+                font=_fnt(10))
         R += 1
-        _sc(ws, R, 1, value=f"TOTAL MEASUREMENT: {summary['total_measurement_m3']:.2f} m³",
-            font=_fnt(10))
+        if summary["total_measurement_m3"] is not None:
+            _sc(ws, R, 1, value=f"TOTAL MEASUREMENT: {summary['total_measurement_m3']:.2f} m³",
+                font=_fnt(10))
         R += 1
-        _sc(ws, R, 1, value="PACKING: BULK IN CARTON, THEN ON EURO-PALLET.",
-            font=_fnt(10))
+        packing_text = "BULK IN CARTON, THEN ON EURO-PALLET."
+        if actual_packing is not None:
+            packing_text = summary["packing_text"]
+        _sc(ws, R, 1, value=f"PACKING: {packing_text}", font=_fnt(10))
         R += 1
         R += 1
         _sc(ws, R, 1, value=f"N.W.: {summary['total_net_weight']:,.2f} KGS   "
                              f"G.W.: {summary['total_gross_weight']:,.2f} KGS",
             font=_fnt(10, bold=True))
 
-        wb.save(output_path)
+        _set_print_layout(ws, 7, title_rows=f"{HDR_ROW}:{HDR_ROW}")
+
+        if workbook_saver is None:
+            wb.save(output_path)
+        else:
+            workbook_saver(wb, output_path)
 
         # Write back to model（单一入口，与出单前预算同源）
         apply_packing_summary_to_derived(model, summary)

@@ -4,7 +4,12 @@ writers/base_writer.py — Writer 公共基类 + 共享辅助函数
 所有 Writer（Quote/PI/CI/PL）继承此基类，保持统一接口。
 共享的 openpyxl cell/merge/border 辅助函数也集中在此。
 """
+import math
+import unicodedata
+
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.properties import PageSetupProperties
 
 FONT_NAME = "Calibri"
 
@@ -76,6 +81,74 @@ def brd(top=None, bottom=None, left=None, right=None):
 def rh(ws, r, pts):
     """Set row height in points."""
     ws.row_dimensions[r].height = pts
+
+
+# ── 打印版式共享函数（正式 PI/CI/PL 与内部工作稿共用）─────────────
+# 修复目标：商品描述（品名 / 规格 / 货号 / 包装）原先挤在窄列里，右侧的
+# 数量或金额列一有内容就把它截断。做法是让描述区用满可用列宽、自动换行、
+# 给足行高；页面统一 A4 竖版、一页宽、纵向允许合理分页、多页重复商品表头。
+#
+# 约束：这些函数只调整对齐、行高与页面级设置，绝不改动任何单元格的值、
+# 公式、数字格式，也不合并覆盖已含数据的邻列（合并范围由各 Writer 指定，
+# 只跨本来就空的占位列）。
+
+
+def _display_units(text: str) -> float:
+    """按显示宽度折算字符数：东亚全角 / 宽字符算 2，其余算 1。"""
+    return sum(2 if unicodedata.east_asian_width(ch) in ("W", "F") else 1
+               for ch in text)
+
+
+def _available_width(ws, first_col: int, last_col: int) -> float:
+    """[first_col, last_col] 区间的可用列宽（Excel 列宽单位 ≈ 字符数）。"""
+    total = 0.0
+    for col in range(first_col, last_col + 1):
+        dim = ws.column_dimensions.get(get_column_letter(col))
+        width = getattr(dim, "width", None) if dim is not None else None
+        total += float(width) if width else 13.0  # openpyxl 未显式设置时默认 13
+    return total
+
+
+def wrapped_row_height(ws, text, first_col: int = 1, last_col: int = 1, *,
+                       font_size: float = 10.0, min_pts: float = 15.0,
+                       fill_ratio: float = 0.92, pad_pts: float = 6.0) -> float:
+    """估算自动换行单元格所需行高（pt），宁高勿截。
+
+    Excel 对合并单元格不会自动调整行高，必须由出表方显式给出；否则即使
+    wrap_text 开着、行高仍是一行，长品名 / 规格 / 货号 / 包装依旧被裁掉。
+    按可用列宽折算行数（含显式换行），不缩字号、不用省略号。
+    """
+    line_pts = font_size * 1.45
+    capacity = max(8.0, _available_width(ws, first_col, last_col) * fill_ratio)
+    lines = 0
+    for paragraph in ("" if text is None else str(text)).split("\n"):
+        lines += max(1, math.ceil(_display_units(paragraph) / capacity))
+    return max(min_pts, round(lines * line_pts + pad_pts, 1))
+
+
+def set_print_layout(ws, last_col: int, *, title_rows: str | None = None,
+                     orientation: str = "portrait", margins=None) -> None:
+    """统一打印设置：A4、竖版、一页宽、纵向允许分页、多页重复商品表头。
+
+    只写页面级设置，不触碰任何单元格值 / 公式 / 数字格式 / 已有合并。
+    fitToPage 必须同时写在 pageSetup 与 sheetPr/pageSetUpPr 上，Excel 才
+    真正按"一页宽"缩放；只写前者会被 Excel 忽略。
+    """
+    ws.page_setup.paperSize = ws.PAPERSIZE_A4
+    ws.page_setup.orientation = orientation
+    ws.page_setup.fitToPage = True
+    ws.page_setup.fitToWidth = 1
+    ws.page_setup.fitToHeight = 0
+    props = ws.sheet_properties.pageSetUpPr
+    if props is None:
+        ws.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
+    else:
+        props.fitToPage = True
+    if margins is not None:
+        ws.page_margins = margins
+    ws.print_area = f"A1:{get_column_letter(last_col)}{max(1, ws.max_row)}"
+    if title_rows:
+        ws.print_title_rows = title_rows
 
 
 class BaseWriter:

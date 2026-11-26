@@ -40,7 +40,7 @@ graph TD
 | 5 | `writers/quote_writer.py` | 报价单 + 隐藏 UUID 列 |
 | 6 | `writers/pi_writer.py` | 形式发票 |
 | 7 | `writers/ci_writer.py` | 商业发票 + SAY 大写金额 |
-| 8 | `writers/pl_writer.py` | 装箱单（Lite 内置 / Full 接私有引擎 `pl-gen`，通过 `legacy/pl_gen_bridge.py` 自动探测） |
+| 8 | `writers/pl_writer_lite.py` | 仓库 CLI 使用的内置装箱单生成器。另有 `writers/pl_writer.py` 提供可选的外部 `pl-gen` 桥接接口。 |
 
 ---
 
@@ -48,13 +48,13 @@ graph TD
 
 ### 1. OrderModel 唯一数据源
 
-所有 Writer 只从 `OrderModel` 读数据，不允许重新解析 Excel。改一处数据，四份单据联动，不存在数据分裂的可能。
+仓库引擎将询价整理为 `OrderModel`，再从共享订单模型生成单据。变更后的结果由相应生成命令重新输出。
 
 ### 2. UUID 锚点价格回写，而不是行号
 
 报价单发给客户后，客户可能插入行、调整顺序、加分组标题。如果按行号回写价格，行号一变价格就全错位。
 
-解决方式：报价单每行藏一个隐藏 UUID 列。价格回写时通过 UUID 精确定位每一行，不管用户怎么编辑 Excel。这个设计来自一次真实事故，细节见 [README.md「这个工具是怎么做出来的」](README.md#这个工具是怎么做出来的)。
+报价表的商品行包含隐藏的 UUID。保留该标识后，调整行序仍可对应到原订单明细。背景见[中文 README 的开发故事](README_CN.md#这个工具是怎么做出来的)。
 
 ### 3. 买家匹配失败 = 硬阻断，不猜测
 
@@ -78,13 +78,17 @@ graph TD
 
 ### 7. 两阶段业务流程
 
-`--quote-only` 先生成报价单（谈判用，价格列留空），客户确认价格后用 `--price-update` 回写价格并生成正式的 PI/CI/PL。避免谈判阶段反复重做整套单据。
+`--quote-only` 可先生成谈判用报价单。确认价格后，配合 `--model` 使用 `--price-update` 回写价格并运行后续单据生成。需要对外使用的单据由业务员另行核对。
 
 ---
 
+## 运行入口
+
+仓库技能 `trade-pipeline-init` 和 `trade-pipeline-run` 使用下方的独立 CLI。WorkBuddy 1.6.4 的按需制单从 `workbuddy/scripts/business.py` 进入，由 `documents.py` 处理共享订单的核对、草稿、正式出单和交付。`order_store.py` 管理订单状态。正式出单需要当前复核记录及用户的桌面确认。技能使用随包依赖在业务目录内准备独立的 Python 环境。
+
 ## CLI 参考
 
-Skill 在背后调用的就是这套命令行接口（`python -m trade_pipeline ...`）：
+运行 `python -m trade_pipeline --help` 可以查看本地版本支持的参数。
 
 | 参数 | 作用 |
 |------|------|
@@ -97,16 +101,14 @@ Skill 在背后调用的就是这套命令行接口（`python -m trade_pipeline 
 | `--price-update <quotation.xlsx>` | 回写填好单价的报价单，需配合 `--model` |
 | `--model <model.json>` | 配合 `--price-update` 使用的 OrderModel 路径 |
 | `--confirm <review.json>` | buyer 匹配失败后，人工编辑确认，继续管线 |
-| `--confirm-packing` | 装箱方案人工确认 |
-| `--interactive` | 交互式逐步确认模式 |
-| `--check-only` | 只跑校验，不生成文件 |
+| `--confirm-packing <packing_review.json>` | 读取已人工核对的装箱资料。缺重量时可由程序生成待填文件。 |
+| `--interactive` | 找不到匹配买家时，进入交互式新建客户流程。 |
+| `--check-only` | 生成检查报告，省略报价单、PI、CI、PL。 |
 | `--skip-warnings` | 跳过非阻断性警告 |
 | `--no-precheck` | 跳过预检查 |
 | `--no-catalog-save` | 不把本次产品信息写入本地产品目录缓存 |
 
-> ⚠️ **`--use-llm` 隐私提示**：开启后会把询价单原始内容（含客户名、产品、数量等）
-> 发送到 Anthropic API 做解析。该选项**默认关闭、需显式 opt-in**；处理敏感 / 保密单据时请谨慎，
-> 或改用默认的本地规则模式（不联网、不外发数据）。
+独立 CLI 默认用本地规则解析。显式启用 `--use-llm` 且可用时，解析器会将提取出的询盘文本（最多前 4,000 字符）发往 Anthropic API，或环境变量 `ANTHROPIC_BASE_URL` 指定的兼容服务。缺少依赖或密钥时，或 API 返回错误时，回退到规则模式。AI 对话客户端中的附件和模型调用依各平台及模型设置处理。
 
 首次配置向导：
 
@@ -114,13 +116,23 @@ Skill 在背后调用的就是这套命令行接口（`python -m trade_pipeline 
 python -m trade_pipeline init
 ```
 
-会交互式引导填写公司信息、贸易条件、币种、装运港、第一个客户，写入 `config/config.yaml`。Claude Code 环境下由 `trade-pipeline-init` Skill 触发同一段逻辑。
+向导会交互式填写公司资料、贸易条件、币种、装运港及第一个客户。在源码模式下，配置文件位于 `trade_pipeline/config/config.yaml`。已有配置时，向导会先询问是否覆盖。仓库技能 `trade-pipeline-init` 调用这一流程。WorkBuddy 版按用户明确请求增量保存资料并保留备份。
+
+用仓库内置的虚构询价试运行报价单。
+
+```bash
+python -m trade_pipeline \
+  --input examples/sample_inquiry.xlsx --order DEMO-QUOTATION \
+  --buyer global_fasteners --quote-only --no-catalog-save
+```
+
+默认输出在 `output/<订单号>/`。可以用 `--output-dir` 指定独立目录。
 
 ---
 
 ## 运行测试
 
-推荐使用 Python 3.12；仓库包含 `.python-version`，pyenv / uv 用户会自动识别。
+项目声明最低 Python 3.11，`.python-version` 推荐 Python 3.12。WorkBuddy 生成真实单据需要能调用 Python 3.11 或更新版本。
 
 ```bash
 # 建虚拟环境（Homebrew / Debian 的系统 Python 受 PEP 668 保护，直接 pip install 会被拒绝）
@@ -155,7 +167,7 @@ ruff check trade_pipeline tests
 
 - **Python 3.12**（`pyproject.toml` 要求 `>=3.11`）+ openpyxl + PyYAML
 - **Claude API**（可选，`pip install -e ".[llm]"`，用于 `--use-llm` 解析模式）
-- **Claude Code**（开发环境，通过 MCP 协议协作构建）
+- **Codex、Google Antigravity 和 Claude Code** 可按仓库说明加载技能。WorkBuddy 走独立技能入口。
 
 ## 许可证
 

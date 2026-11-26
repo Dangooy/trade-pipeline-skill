@@ -12,8 +12,12 @@ writers/ci_writer.py — CI 商业发票生成器
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.page import PageMargins
 
-from .base_writer import BaseWriter, sc as _sc, mc as _mc, brd as _brd
+from .base_writer import (
+    BaseWriter, sc as _sc, mc as _mc, brd as _brd,
+    wrapped_row_height as _wrapped_height, set_print_layout as _set_print_layout,
+)
 from ..models.amounts import amount_formula, compute_amount, PricingMode
 from ..models.order_model import effective_weight_kg
 
@@ -26,6 +30,25 @@ def _fnt(size=10, bold=False, color="000000", name=CALIBRI):
 
 def _aln(h="left", v=None, wrap=False):
     return Alignment(horizontal=h, vertical=v, wrap_text=wrap)
+
+
+def _header_number(ws, r, text, *, size=11):
+    """写 Q 列（打印范围最后一列）的号码 / 编号单元格，按实际行号 r 处理。
+
+    Q 列是 A4 竖版打印范围的最后一列，号码一律右对齐。不换行时长编号
+    （如 CI-PRINT-with-actuals-6、SALES CONTRACT NO.、引用的长 PI 号）会
+    向左溢出到 P 列的号码标签上（开头被「号码NO.」挡住）或顶到打印右边界
+    被裁掉。让它在 Q 列内自动换行，行高按内容抬高（复用共享
+    wrapped_row_height，不缩字号、不截值、不改原值与右对齐）。
+
+    行号 r 由调用方按写入时的实际位置传入：表头区行号会随卖方中文名 /
+    地址、买方地址行数浮动，不能硬编码 Q5 / Q7 / Q8。
+    """
+    cell = _sc(ws, r, 17, value=text, font=_fnt(size),
+               align=_aln("right", wrap=True))
+    needed = _wrapped_height(ws, text, 17, 17, font_size=size)
+    ws.row_dimensions[r].height = max(ws.row_dimensions[r].height or 0, needed)
+    return cell
 
 
 # ── 大写金额 ──────────────────────────────────────────────
@@ -95,7 +118,7 @@ def amount_to_words(amount: float, currency: str = "USD") -> str:
 class CIWriter(BaseWriter):
     """CI 商业发票 Writer"""
 
-    def write(self, output_path: str, **kwargs) -> dict:
+    def write(self, output_path: str, *, verified_shipment=False, workbook_saver=None, **kwargs) -> dict:
         model = self.model
         items = model.items
         # 与 quote/PI 一致地兜底:currency 缺失时此前会渲染 "None/ FOB PRICE"
@@ -107,22 +130,17 @@ class CIWriter(BaseWriter):
         ws = wb.active
         ws.title = model.order.ci_number or "CI"
 
-        # 列宽 A-R
+        # 列宽 A-R。P/Q 原先过宽（20.1 / 33.3），A4 竖版一页宽会被迫大幅
+        # 缩印；数字列只需容纳 "#,##0.00" 与币种标签，收窄后描述区更清晰。
         col_widths = {
             'A': 7.0, 'B': 11.0, 'C': 4.5, 'D': 3.5, 'E': 3.9, 'F': 3.0,
             'G': 8.43, 'H': 1.9, 'I': 5.5, 'J': 4.9, 'K': 6.9, 'L': 3.9,
-            'M': 5.3, 'N': 13.0, 'O': 13.0, 'P': 20.1, 'Q': 33.3, 'R': 12.3,
+            'M': 5.3, 'N': 13.0, 'O': 13.0, 'P': 14.0, 'Q': 16.0, 'R': 12.3,
         }
         for col_letter, w in col_widths.items():
             ws.column_dimensions[col_letter].width = w
 
-        # 页面设置
-        ws.page_setup.paperSize = 9
-        ws.page_setup.orientation = 'landscape'
-        ws.page_margins.left = 0.35
-        ws.page_margins.right = 0.35
-        ws.page_margins.top = 0.47
-        ws.page_margins.bottom = 0.51
+        # 打印版式在所有行写完后统一设置，见文件末尾。
 
         seller_name_cn = self.seller.get("name_cn", "")
         seller_name_en = self.seller.get("name_en", "")
@@ -176,14 +194,14 @@ class CIWriter(BaseWriter):
         _sc(ws, R, 1, value="TO：", font=_fnt(10))
         _sc(ws, R, 2, value=buyer_name, font=_fnt(10))
         _sc(ws, R, 16, value="号码NO.", font=_fnt(11), align=_aln("right"))
-        _sc(ws, R, 17, value=model.order.ci_number, font=_fnt(11), align=_aln("right"))
+        _header_number(ws, R, model.order.ci_number, size=11)
         R += 1
 
         # ── INN + 日期 ──
         if buyer_inn:
             _sc(ws, R, 2, value=f"INN: {buyer_inn}", font=_fnt(10))
         _sc(ws, R, 16, value="日期DATE", font=_fnt(11), align=_aln("right"))
-        _sc(ws, R, 17, value=ci_date, font=_fnt(11), align=_aln("right"))
+        _header_number(ws, R, ci_date, size=11)
         R += 1
 
         # ── 买家地址 + 信用证号 ──
@@ -191,14 +209,14 @@ class CIWriter(BaseWriter):
             _sc(ws, R, 2, value=line, font=_fnt(10))
             if i == 0:
                 _sc(ws, R, 16, value="信用证号L/C NO.", font=_fnt(11), align=_aln("right"))
-                _sc(ws, R, 17, value=model.order.lc_number or "", font=_fnt(11), align=_aln("right"))
+                _header_number(ws, R, model.order.lc_number or "", size=11)
             R += 1
 
         # ── 合约号 ──
         _sc(ws, R, 16, value="合约号：", font=_fnt(12), align=_aln("right"))
-        _sc(ws, R, 17, value="SALES CONTRACT NO.", font=_fnt(11), align=_aln("right"))
+        _header_number(ws, R, "SALES CONTRACT NO.", size=11)
         R += 1
-        _sc(ws, R, 17, value=model.order.pi_number, font=_fnt(12), align=_aln("right"))
+        _header_number(ws, R, model.order.pi_number, size=12)
         R += 1
 
         # ── 装运地/目的地 ──
@@ -216,6 +234,7 @@ class CIWriter(BaseWriter):
         from openpyxl.styles import PatternFill
         hdr_fill = PatternFill("solid", fgColor="1F3864")
         hdr_font = _fnt(10, bold=True, color="FFFFFF")
+        HDR_ROW = R
         _mc(ws, R, 1, R, 2, value="MARKS & NOS\n唛头", font=hdr_font, align=_aln("center", wrap=True))
         for ci in range(1, 3):
             ws.cell(R, ci).fill = hdr_fill
@@ -236,24 +255,37 @@ class CIWriter(BaseWriter):
 
         # ── 单位行 ──
         unit_label = "pcs" if model.order.format != "washers_mar" else "tons"
+        if verified_shipment:
+            unit_label = items[0].unit
         # C3:吨计价数量含小数(12,345.6 tons),整数格式会显示成 12,346 与
         # PI(两位小数)不一致、与金额公式输入脱节;件计价保持整数
         qty_fmt = (
             "#,##0.00"
             if model.order.format == "washers_mar"
             or PricingMode.from_price_unit(price_unit) is PricingMode.PER_TON
+            or (verified_shipment and unit_label != "pcs")
             else "#,##0"
         )
-        _sc(ws, R, 3, value=f"Order No.:{model.order.pi_number}",
-            font=_fnt(11, bold=True))
+        order_reference = model.order.order_no if verified_shipment else model.order.pi_number
+        order_line = f"Order No.:{order_reference}"
+        _mc(ws, R, 3, R, 13, value=order_line,
+            font=_fnt(11, bold=True), align=_aln("left", "center", wrap=True))
         _sc(ws, R, 14, value=unit_label, font=_fnt(11), align=_aln("right"),
             border=_brd(left="thin"))
         _sc(ws, R, 15, value="kgs", font=_fnt(11), align=_aln("right"),
             border=_brd(left="thin"))
         _sc(ws, R, 16, value=price_unit, font=_fnt(11), align=_aln("right"),
             border=_brd(left="thin", right="thin"))
-        _sc(ws, R, 17, value=f"{currency}/ FOB PRICE", font=_fnt(11), align=_aln("center"),
+        amount_label = f"{currency}/ FOB PRICE"
+        if verified_shipment:
+            amount_label = f"{currency} / {self.terms['delivery']}"
+        _sc(ws, R, 17, value=amount_label, font=_fnt(11), align=_aln("center", wrap=True),
             border=_brd(left="thin"))
+        ws.row_dimensions[R].height = max(
+            _wrapped_height(ws, order_line, 3, 13, font_size=11),
+            _wrapped_height(ws, amount_label, 17, 17, font_size=11),
+            15,
+        )
         R += 1
 
         # ── 数据区 ──
@@ -265,15 +297,19 @@ class CIWriter(BaseWriter):
             # 品类标题行
             group = item.group_key or item.standard or ""
             if group and group != prev_group:
-                _sc(ws, R, 3, value=group, font=_fnt(10, bold=True), align=_aln("left"))
+                _mc(ws, R, 3, R, 13, value=group, font=_fnt(10, bold=True),
+                    align=_aln("left", "center", wrap=True))
                 for c in [14, 15, 16]:
                     ws.cell(R, c).border = _brd(left="thin")
-                ws.row_dimensions[R].height = 14.1
+                ws.row_dimensions[R].height = _wrapped_height(
+                    ws, group, 3, 13, font_size=10)
                 R += 1
                 prev_group = group
 
-            # 数据行
-            _sc(ws, R, 3, value=item.description, font=_fnt(10), align=_aln("left"))
+            # 数据行：描述占满 C:M 可用列宽；N:Q 含数量 / 重量 / 单价 / 金额，
+            # 不并入合并区。
+            _mc(ws, R, 3, R, 13, value=item.description, font=_fnt(10),
+                align=_aln("left", "top", wrap=True))
 
             # N: qty
             _sc(ws, R, 14, value=item.quantity, font=_fnt(10), align=_aln("right"),
@@ -310,7 +346,8 @@ class CIWriter(BaseWriter):
                 unit_price=item.unit_price,
             )
 
-            ws.row_dimensions[R].height = 14.1
+            ws.row_dimensions[R].height = _wrapped_height(
+                ws, item.description, 3, 13, font_size=10, min_pts=15)
             R += 1
 
         DATA_END = R - 1
@@ -323,7 +360,8 @@ class CIWriter(BaseWriter):
         _sc(ws, R, 3, value="TOTAL:", font=_fnt(12), align=_aln("left"))
         _sc(ws, R, 14, value=f"=SUM(N{DATA_START}:N{DATA_END})", formula=True,
             font=_fnt(12), align=_aln("right"),
-            border=_brd(left="thin", top="thin", bottom="thin"), num_fmt='#,##0')
+            border=_brd(left="thin", top="thin", bottom="thin"),
+            num_fmt=qty_fmt if verified_shipment else "#,##0")
         _sc(ws, R, 15, value=f"=SUM(O{DATA_START}:O{DATA_END})", formula=True,
             font=_fnt(12), align=_aln("right"),
             border=_brd(left="thin", top="thin", bottom="thin"), num_fmt='#,##0.00')
@@ -348,7 +386,7 @@ class CIWriter(BaseWriter):
         pallet_count = model.derived.pallet_count
         if pallet_count:
             _sc(ws, R, 1, value=f"PACKED IN {pallet_count} PALLETS ONLY.", font=_fnt(12))
-        else:
+        elif not verified_shipment:
             _sc(ws, R, 1, value="PACKED IN [    ] PALLETS ONLY.", font=_fnt(12))
         R += 1
 
@@ -370,11 +408,21 @@ class CIWriter(BaseWriter):
         gross_from_budget = model.derived.total_gross_weight is not None
         if not net_from_budget:
             nw = sum(effective_weight_kg(i) or 0 for i in items)
-        gw = model.derived.total_gross_weight or round(nw * 1.036, 2)
+        gw = model.derived.total_gross_weight
+        if not verified_shipment and not gw:
+            gw = round(nw * 1.036, 2)
         _sc(ws, R, 1, value=f"N.W.:{nw:,.2f}KGS  G.W.:{gw:,.2f}KGS", font=_fnt(12))
         R += 1
 
-        wb.save(output_path)
+        _set_print_layout(
+            ws, 17, title_rows=f"{HDR_ROW}:{HDR_ROW}",
+            margins=PageMargins(left=0.35, right=0.35, top=0.47, bottom=0.51),
+        )
+
+        if workbook_saver is None:
+            wb.save(output_path)
+        else:
+            workbook_saver(wb, output_path)
 
         return {
             "items": len(items),
